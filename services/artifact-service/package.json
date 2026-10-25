@@ -1,0 +1,11 @@
+{
+  "name": "@ads/artifact-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@ads/shared-types": "0.1.0"
+  }
+}

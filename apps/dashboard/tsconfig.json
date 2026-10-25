@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noUnusedLocals": false,
+    "baseUrl": ".",
+    "paths": { "@ads/shared-types": ["../../packages/shared-types/src/index.ts"] }
+  },
+  "include": ["src", "vite-config.d.ts"],
+  "references": [{ "path": "../../packages/shared-types" }],
+  "files": []
+}
