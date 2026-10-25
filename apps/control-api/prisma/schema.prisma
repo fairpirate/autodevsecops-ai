@@ -1,0 +1,143 @@
+// Prisma schema — PostgreSQL persistence for the control plane.
+// Generate: npm run db:generate   Migrate: npm run db:migrate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id                String   @id @default(uuid())
+  name              String
+  gitlabBaseUrl     String
+  gitlabProjectId   Int
+  pathWithNamespace String
+  defaultBranch     String   @default("main")
+  // AES-256-GCM ciphertext (enc.v1.*) — plaintext tokens are never stored.
+  tokenEncrypted    String
+  webUrl            String?
+  createdAt         DateTime @default(now())
+  runs              Run[]
+}
+
+model Run {
+  id                  String   @id @default(uuid())
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gitlabProjectId     Int
+  ref                 String
+  commitSha           String
+  state               String
+  iteration           Int      @default(1)
+  budget              Json
+  issues              Json     @default("[]")
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  stopReason          String?
+  parentRunId         String?
+  failureFingerprints Json     @default("{}")
+  noProgressIterations Int     @default(0)
+  tokensUsed          Int      @default(0)
+  costEstimateUsd     Float    @default(0)
+  mrIid               Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  testResults         TestResultRecord[]
+  artifacts           Artifact[]
+  events              EventLog[]
+}
+
+model TestResultRecord {
+  id             String @id @default(uuid())
+  runId          String
+  run            Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  commitSha      String
+  artifactId     String?
+  environment    String
+  suite          String
+  platform       String
+  passed         Boolean
+  durationMs     Int
+  failureSummary String?
+  logLink        String?
+  total          Int?
+  failed         Int?
+  skipped        Int?
+  timestamp      String
+}
+
+model Artifact {
+  id              String   @id @default(uuid())
+  runId           String
+  run             Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sourceCommitSha String
+  pipelineId      String?
+  buildJobId      String?
+  digest          String
+  kind            String
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  releases        Release[]
+}
+
+model Release {
+  id                String   @id @default(uuid())
+  artifactId        String
+  artifact          Artifact @relation(fields: [artifactId], references: [id])
+  sourceCommitSha   String
+  artifactDigest    String
+  testEvidence      Json     @default("[]")
+  securityScanStatus String  @default("not_run")
+  qualityGateDecision String @default("pending")
+  approvals         Json     @default("[]")
+  createdAt         DateTime @default(now())
+  deployments       Deployment[]
+}
+
+model Deployment {
+  id                  String   @id @default(uuid())
+  releaseId           String
+  release             Release  @relation(fields: [releaseId], references: [id])
+  environment         String
+  status              String
+  artifactDigest      String
+  sourceCommitSha     String
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  healthChecks        Json     @default("[]")
+  rollbackAvailable   Boolean  @default(false)
+  rollbackOfDeploymentId String?
+  auditTrail          Json     @default("[]")
+  createdAt           DateTime @default(now())
+}
+
+model EventLog {
+  id      Int      @id @default(autoincrement())
+  runId   String
+  run     Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  type    String
+  at      String
+  payload Json
+}
+
+model WebhookEvent {
+  key       String   @id
+  receivedAt DateTime @default(now())
+}
+
+model AuditLog {
+  id     String   @id @default(uuid())
+  at     DateTime @default(now())
+  actor  String
+  action String
+  detail String
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
