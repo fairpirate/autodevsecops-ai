@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/shared-types" },
+    { "path": "../../packages/issue-ledger" },
+    { "path": "../../packages/policy-engine" },
+    { "path": "../../packages/workflow-engine" },
+    { "path": "../../packages/test-adapters" },
+    { "path": "../gitlab-integration" }
+  ],
+  "dependencies": {
+    "bullmq": "5.34.5",
+    "ioredis": "5.4.2"
+  }
+}
