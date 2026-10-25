@@ -1,0 +1,105 @@
+# Local full-stack simulation of environment separation.
+# NOTE: this simulates env-specific behavior locally; real staging/production
+# are the protected GitLab environments in .gitlab-ci.yml.
+# Usage: docker compose -f infrastructure/docker/docker-compose.yml up --build
+# Profiles: default (api+dashboard+postgres+redis), workers (orchestrator+execution-worker).
+
+name: autodevsecops-ai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: autodevsecops
+      POSTGRES_USER: ads
+      POSTGRES_PASSWORD: ads
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ads -d autodevsecops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  control-api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/control-api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      CONTROL_API_PORT: 4000
+      PUBLIC_BASE_URL: http://localhost:4000
+      API_KEYS: ${API_KEYS:-dev-admin-key:admin,dev-eng-key:engineer,dev-viewer:viewer}
+      CREDENTIAL_KEY_BASE64: ${CREDENTIAL_KEY_BASE64:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      DATABASE_URL: postgresql://ads:ads@postgres:5432/autodevsecops?schema=public
+      REDIS_URL: redis://redis:6379
+      STORE: prisma
+      QUEUE_DRIVER: bullmq
+      EVENT_DRIVER: memory
+      GITLAB_BASE_URL: ${GITLAB_BASE_URL:-https://gitlab.com}
+      GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:-change-me-webhook-secret}
+      DUO_FLOWS_ENABLED: ${DUO_FLOWS_ENABLED:-false}
+      DUO_FLOW_DEFINITION: ${DUO_FLOW_DEFINITION:-}
+      EXEC_WORK_DIR: /tmp/exec-workspace
+    ports:
+      - "4000:4000"
+    command: >
+      sh -c "npx prisma migrate deploy --schema apps/control-api/prisma/schema.prisma
+      && node apps/control-api/dist/server.js"
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/dashboard.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:4000}
+    ports:
+      - "5173:80"
+    depends_on:
+      - control-api
+
+  orchestrator:
+    profiles: ["workers"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/orchestrator.Dockerfile
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      QUEUE_DRIVER: bullmq
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://ads:ads@postgres:5432/autodevsecops?schema=public
+
+  execution-worker:
+    profiles: ["workers"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/execution-worker.Dockerfile
+    depends_on:
+      - redis
+    environment:
+      QUEUE_DRIVER: bullmq
+      REDIS_URL: redis://redis:6379
+      EXEC_WORK_DIR: /tmp/exec-workspace
+      EXEC_JOB_TIMEOUT_MS: 600000
+
+volumes:
+  pgdata:
