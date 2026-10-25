@@ -1,0 +1,32 @@
+# Deployment manifests — how the immutable release candidate is promoted.
+# The SAME artifact digest built once (CI build-images job) is promoted
+# DEVELOPMENT → STAGING → PRODUCTION; a source change requires a rebuild +
+# re-validation (new digest) before promotion.
+promotion:
+  order: [DEVELOPMENT, STAGING, PRODUCTION]
+  requireSameDigest: true
+  rebuildOnSourceChange: true
+
+# Containerized web + server deployments are primary. Mobile package
+# generation is part of the release pipeline (android_package artifacts with
+# checksums), distributed via platform-appropriate signing/distribution —
+# never automatic installation onto users' devices.
+
+environments:
+  DEVELOPMENT:
+    strategy: rolling
+    healthChecks: [{name: smoke, endpoint: /api/v1/health }]
+  STAGING:
+    strategy: rolling
+    healthChecks:
+      - {name: smoke, endpoint: /api/v1/health }
+      - {name: e2e-critical-journeys, suite: web:e2e }
+  PRODUCTION:
+    strategy: canary
+    canarySteps: [5, 25, 100]
+    healthChecks:
+      - {name: readiness, endpoint: /api/v1/health }
+      - {name: error-budget, window: 30m }
+    rollback:
+      automaticOn: [health-check-failure, error-budget-breach]
+      target: previous-known-good-digest
