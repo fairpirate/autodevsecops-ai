@@ -1,0 +1,16 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../api";
+import { useUi } from "../store";
+import { Empty, ErrorBox, Loading, Pill } from "../components/Status";
+export function Deployments() {
+    const qc = useQueryClient();
+    const tick = useUi((s) => s.refreshToken);
+    const list = useQuery({ queryKey: ["deployments", tick], queryFn: () => api.deployments() });
+    const [form, setForm] = useState({ releaseId: "", environment: "development" });
+    const approve = useMutation({ mutationFn: (id) => api.approveDeployment(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["deployments"] }) });
+    const rollback = useMutation({ mutationFn: (id) => api.rollbackDeployment(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["deployments"] }) });
+    return (_jsxs("div", { className: "grid", style: { gap: 16 }, children: [_jsx("h2", { style: { margin: 0 }, children: "Deployments" }), _jsxs("div", { className: "card", children: [_jsx("h3", { children: "Artifact identity & provenance" }), _jsx("p", { className: "muted", children: "Every deployment promotes one immutable artifact (sha256 digest). Same digest moves development \u2192 staging \u2192 production; any code change requires a new validated artifact." })] }), _jsxs("div", { className: "card", children: [list.isPending ? _jsx(Loading, {}) : list.isError ? _jsx(ErrorBox, { message: list.error.message, onRetry: () => list.refetch() }) : list.data.items.length === 0 ? _jsx(Empty, { message: "No deployments yet \u2014 create a release from a READY_FOR_BUILD run first." }) : (_jsxs("table", { children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Environment" }), _jsx("th", { children: "Status" }), _jsx("th", { children: "Artifact" }), _jsx("th", { children: "Approvals" }), _jsx("th", { children: "Health" }), _jsx("th", { children: "Actions" })] }) }), _jsx("tbody", { children: list.data.items.map((d) => (_jsxs("tr", { children: [_jsx("td", { children: d.environment }), _jsx("td", { children: _jsx(Pill, { value: d.status }) }), _jsxs("td", { children: [d.artifactDigest.slice(0, 16), "\u2026"] }), _jsx("td", { children: d.approvals.length }), _jsx("td", { children: d.healthChecks.length === 0 ? "—" : d.healthChecks.map((h) => `${h.name}:${h.ok ? "ok" : "FAIL"}`).join(", ") }), _jsx("td", { children: _jsxs("div", { className: "row", children: [_jsx("button", { type: "button", className: "ghost", disabled: approve.isPending, onClick: () => approve.mutate(d.id), children: "Approve" }), _jsx("button", { type: "button", className: "ghost", disabled: !d.rollbackAvailable || rollback.isPending, onClick: () => rollback.mutate(d.id), children: "Rollback" })] }) })] }, d.id))) })] })), (approve.isError || rollback.isError) && _jsx("p", { role: "alert", children: (approve.error ?? rollback.error).message })] })] }));
+}
+//# sourceMappingURL=Deployments.js.map
