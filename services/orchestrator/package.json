@@ -1,0 +1,16 @@
+{
+  "name": "@ads/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@ads/shared-types": "0.1.0",
+    "@ads/issue-ledger": "0.1.0",
+    "@ads/policy-engine": "0.1.0",
+    "@ads/workflow-engine": "0.1.0",
+    "@ads/test-adapters": "0.1.0",
+    "@ads/gitlab-integration": "0.1.0"
+  }
+}
