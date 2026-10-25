@@ -1,0 +1,16 @@
+# PRODUCTION — explicit approval; promote the SAME immutable artifact verified
+# in staging; protected GitLab environment + deployment permissions;
+# pre-deployment checks; health checks + controlled rollout where supported;
+# rollback to a known-good artifact on defined failure conditions.
+name: PRODUCTION
+autoDeploy: false
+promoteFrom: STAGING
+requireSameArtifactDigest: true
+requireApproval: true
+# Mirrors policy-engine DEFAULT_POLICY.requiredApprovals.PRODUCTION
+requiredApprovals: 1
+protected: true
+rollbackOn:
+  - health-check-failure
+  - error-budget-breach
+dataClassification: production
