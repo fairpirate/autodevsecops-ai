@@ -1,0 +1,8 @@
+# DEVELOPMENT — auto-deploy approved builds, isolated services + test data.
+name: DEVELOPMENT
+autoDeploy: true
+requireApproval: false
+healthUrl: ""
+dataClassification: test-data-only
+notes: Local simulation uses the control-api service with STORE=memory|prisma;
+  credentials and configuration are separate from staging/production.
