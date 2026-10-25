@@ -1,0 +1,38 @@
+{
+  "name": "autodevsecops-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Autonomous DevSecOps AI Platform - Review. Repair. Verify. Test. Deploy.",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "typecheck": "tsc -b tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:api": "tsx watch apps/control-api/src/server.ts",
+    "dev:orchestrator": "tsx watch services/orchestrator/src/main.ts",
+    "dev:worker": "tsx watch services/execution-worker/src/main.ts",
+    "dev:dashboard": "npm run dev -w @ads/dashboard",
+    "db:generate": "prisma generate --schema apps/control-api/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema apps/control-api/prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema apps/control-api/prisma/schema.prisma",
+    "db:seed": "tsx apps/control-api/prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/supertest": "6.0.2",
+    "prisma": "5.22.0",
+    "supertest": "7.0.0",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}
