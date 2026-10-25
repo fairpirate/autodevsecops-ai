@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/shared-types" },
+    { "path": "packages/issue-ledger" },
+    { "path": "packages/policy-engine" },
+    { "path": "packages/workflow-engine" },
+    { "path": "packages/test-adapters" },
+    { "path": "services/gitlab-integration" },
+    { "path": "services/artifact-service" },
+    { "path": "services/orchestrator" },
+    { "path": "services/execution-worker" },
+    { "path": "apps/control-api" }
+  ]
+}

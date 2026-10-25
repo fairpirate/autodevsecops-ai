@@ -1,0 +1,154 @@
+# AutoDevSecOps AI — CI pipeline
+# Docs: https://docs.gitlab.com/ci/
+# Stages mirror the platform lifecycle: validate -> test -> build -> security -> deploy.
+# Requires: shared runners (or project runners with docker). Protected environments:
+# `staging` and `production` (configure in Settings > CI/CD > Environments).
+
+stages:
+  - validate
+  - test
+  - build
+  - security
+  - deploy
+
+variables:
+  NODE_VERSION: "20.11.0"
+  POSTGRES_DB: "autodevsecops"
+  POSTGRES_USER: "ads"
+  POSTGRES_PASSWORD: "$CI_POSTGRES_PASSWORD"
+  DATABASE_URL: "postgresql://ads:$CI_POSTGRES_PASSWORD@postgres:5432/autodevsecops?schema=public"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# ---------------------------------------------------------------- typecheck
+typecheck:
+  stage: validate
+  image: node:20.11-bookworm-slim
+  script:
+    - npm ci --no-audit --no-fund
+    - npm run typecheck
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------- unit + integration tests
+unit-integration-tests:
+  stage: test
+  image: node:20.11-bookworm-slim
+  script:
+    - npm ci --no-audit --no-fund
+    - npx vitest run --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/junit.xml
+    paths:
+      - test-results/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------- dashboard build
+build-dashboard:
+  stage: build
+  image: node:20.11-bookworm-slim
+  script:
+    - npm ci --no-audit --no-fund
+    - npm run build -w @ads/dashboard
+  artifacts:
+    paths:
+      - apps/dashboard/dist/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------- container images (immutable artifacts)
+build-images:
+  stage: build
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build -f infrastructure/docker/control-api.Dockerfile -t "$CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA" .
+    - docker build -f infrastructure/docker/orchestrator.Dockerfile -t "$CI_REGISTRY_IMAGE/orchestrator:$CI_COMMIT_SHA" .
+    - docker build -f infrastructure/docker/execution-worker.Dockerfile -t "$CI_REGISTRY_IMAGE/execution-worker:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/orchestrator:$CI_COMMIT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/execution-worker:$CI_COMMIT_SHA"
+    - echo "ARTIFACT_DIGEST_CONTROL_API=$CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------- security scans
+secret-detection:
+  stage: security
+  image: node:20.11-bookworm-slim
+  script:
+    - npm ci --no-audit --no-fund
+    - npx tsx scripts/security-scan.ts
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+dependency-audit:
+  stage: security
+  image: node:20.11-bookworm-slim
+  script:
+    - npm audit --audit-level=high
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------- deploys (protected environments)
+deploy-staging:
+  stage: deploy
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ""
+  environment:
+    name: staging
+    url: https://staging.example.com
+  script:
+    - echo "Promoting immutable artifact $CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA to staging"
+    - docker pull "$CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy-production:
+  stage: deploy
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ""
+  environment:
+    name: production
+    url: https://app.example.com
+  script:
+    - echo "Promoting the SAME immutable artifact verified in staging to production"
+    - docker pull "$CI_REGISTRY_IMAGE/control-api:$CI_COMMIT_SHA"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
