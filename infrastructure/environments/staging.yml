@@ -1,0 +1,15 @@
+# STAGING — promote the EXACT artifact that passed development; full
+# integration + e2e; migrations + API compatibility validated; mandatory
+# gates block promotion on failure.
+name: STAGING
+autoDeploy: false
+promoteFrom: DEVELOPMENT
+requireSameArtifactDigest: true
+requireApproval: false
+requiredGates:
+  - no_open_blocking_issues
+  - security_policy
+  - security_scan_executed
+  - required_test_suites
+  - test_pass_rate
+dataClassification: sanitized-test-data
