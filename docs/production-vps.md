@@ -112,6 +112,13 @@ curl -i http://127.0.0.1:4000/api/v1/health   # expect HTTP 200 JSON
 There is also `scripts/vps-deploy.sh`, which performs steps 3–5 end-to-end
 (review it before running).
 
+If the API restarts during migrations with Prisma OpenSSL warnings, rebuild
+the API image after updating `infrastructure/docker/control-api.Dockerfile`.
+The image installs OpenSSL in both build and runtime stages and explicitly
+generates Prisma Client for the container platform. Installing OpenSSL only
+on the VPS host does not install it inside the container. Keep any extra
+port override file in the Compose command when rebuilding on a shared VPS.
+
 ## 6. Nginx + Certbot (TLS termination)
 
 Host Nginx proxies `/api/` to the API container and everything else to the
