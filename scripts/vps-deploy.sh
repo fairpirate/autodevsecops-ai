@@ -90,19 +90,22 @@ docker compose \
 # 6. Health check
 # ---------------------------------------------------------------------------
 log "Waiting for control-api to become healthy"
+api_binding=$(docker compose \
+  -f infrastructure/docker/docker-compose.yml \
+  -f infrastructure/docker/docker-compose.prod.yml \
+  --env-file .env \
+  port control-api 4000)
+[[ -n "$api_binding" ]] || die "control-api has no published port"
+health_url="http://${api_binding}/api/v1/health"
 for i in $(seq 1 30); do
-  status=$(docker compose \
-    -f infrastructure/docker/docker-compose.yml \
-    -f infrastructure/docker/docker-compose.prod.yml \
-    ps --filter "name=control-api" --format json 2>/dev/null | grep -o '"Status":"[^"]*"' || true)
-  case "$status" in
-    *"healthy"|*"running"*) break ;;
-  esac
+  if curl --connect-timeout 2 --max-time 5 -fsS "$health_url" >/dev/null 2>&1; then
+    break
+  fi
   sleep 2
 done
 
-if curl -fsS http://127.0.0.1:4000/api/v1/health >/dev/null; then
-  log "Health check OK: $(curl -sS http://127.0.0.1:4000/api/v1/health)"
+if curl --connect-timeout 2 --max-time 5 -fsS "$health_url" >/dev/null; then
+  log "Health check OK: $health_url"
 else
   die "control-api health check failed — inspect: docker compose logs control-api"
 fi

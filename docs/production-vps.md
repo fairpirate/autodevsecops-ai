@@ -117,6 +117,14 @@ There is also `scripts/vps-deploy.sh`, which performs steps 3–5 end-to-end
 Host Nginx proxies `/api/` to the API container and everything else to the
 dashboard container. Adapt `infrastructure/nginx/autodevsecops.conf`:
 
+On a shared VPS, set unused host ports in `.env`, for example
+`CONTROL_API_HOST_PORT=14000` and `DASHBOARD_HOST_PORT=18080`. Keep
+`CONTROL_API_PORT=4000` for the API inside Docker. In this project's Nginx
+site, use `proxy_pass http://127.0.0.1:14000;` for `/api/` and
+`proxy_pass http://127.0.0.1:18080;` for `/`. Adjust manual health checks to
+`http://127.0.0.1:14000/api/v1/health`. The deploy script discovers the
+published API port automatically. Existing projects can keep their ports.
+
 1. Replace `server_name autodevsecops.spiritedrobot.in` with your domain.
 2. Replace cert paths `/etc/letsencrypt/live/<domain>/...` after Certbot runs.
 3. For Compose mode, change `root /var/www/...` in the `location /` block to

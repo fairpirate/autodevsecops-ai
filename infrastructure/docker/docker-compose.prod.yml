@@ -4,8 +4,8 @@
 # This overlay hardens it for production:
 #   * Postgres and Redis use the Docker network only; no host ports.
 #   * Requires Docker Compose >=2.24.4 for !override port replacement.
-#   * The control API binds to 127.0.0.1:4000; host Nginx terminates TLS.
-#   * The dashboard container serves the built frontend on 127.0.0.1:8080.
+#   * API/dashboard host ports are configurable and bind to 127.0.0.1.
+#     Defaults: CONTROL_API_HOST_PORT=4000, DASHBOARD_HOST_PORT=8080.
 #   * restart: unless-stopped on every service.
 #   * JSON log rotation + memory limits.
 #   * A health check on /api/v1/health.
@@ -68,7 +68,7 @@ services:
       file: docker-compose.yml
       service: control-api
     ports: !override
-      - "127.0.0.1:4000:4000"
+      - "127.0.0.1:${CONTROL_API_HOST_PORT:-4000}:4000"
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -97,7 +97,7 @@ services:
       file: docker-compose.yml
       service: dashboard
     ports: !override
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:${DASHBOARD_HOST_PORT:-8080}:80"
     restart: unless-stopped
     logging:
       driver: "json-file"
