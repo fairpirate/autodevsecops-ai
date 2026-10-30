@@ -17,7 +17,7 @@ export function Repairs() {
     if (runs.isError)
         return _jsx(ErrorBox, { message: runs.error.message, onRetry: () => runs.refetch() });
     const rows = (details.data ?? []).flatMap((d) => d.issues.filter((i) => ["repair_attempted", "awaiting_verification", "verified_fixed", "reopened", "blocked"].includes(i.state))
-        .map((i) => ({ run: d, issue: i })));
+        .map((i) => ({ run: d.run, issue: i })));
     return (_jsxs("div", { className: "grid", style: { gap: 16 }, children: [_jsx("h2", { style: { margin: 0 }, children: "AI Repair History" }), _jsx("div", { className: "card", children: rows.length === 0 ? _jsx(Empty, { message: "No repair attempts yet." }) : (_jsxs("table", { children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Run" }), _jsx("th", { children: "Issue" }), _jsx("th", { children: "State" }), _jsx("th", { children: "Verification" })] }) }), _jsx("tbody", { children: rows.map(({ run, issue }) => (_jsxs("tr", { children: [_jsxs("td", { children: [run.ref, "@", run.commitSha.slice(0, 8)] }), _jsx("td", { children: issue.title }), _jsx("td", { children: _jsx(Pill, { value: issue.state }) }), _jsx("td", { children: issue.state === "verified_fixed" ? "independent-verification-agent ✓" : "pending / rejected" })] }, `${run.id}-${issue.id}`))) })] })) })] }));
 }
 //# sourceMappingURL=Repairs.js.map

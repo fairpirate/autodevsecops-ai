@@ -199,7 +199,16 @@ export function buildRouter(deps: AppDeps): Router {
   router.get("/runs/:id", async (req, res) => {
     const row = await store.runs.get(req.params.id);
     if (!row) return notFound(res, "Run");
-    res.json({ run: row.run, issues: row.issues, metrics: computeRunMetrics(row.run, row.issues) });
+    const testResults = await store.testResults.listByRun(row.run.id);
+    const gates = evaluateQualityGates({
+      issues: row.issues,
+      testResults,
+      securityScanPassed: row.issues.every(
+        (i) => i.category !== "security" || i.state === "verified_fixed" || i.state === "false_positive",
+      ),
+      policy: await store.settings.get("policy", DEFAULT_POLICY),
+    });
+    res.json({ run: row.run, issues: row.issues, metrics: computeRunMetrics(row.run, row.issues), gates });
   });
 
   router.post("/runs/:id/cancel", async (req, res) => {

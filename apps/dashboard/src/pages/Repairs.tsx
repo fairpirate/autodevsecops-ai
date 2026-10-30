@@ -17,7 +17,7 @@ export function Repairs() {
   if (runs.isError) return <ErrorBox message={(runs.error as Error).message} onRetry={() => runs.refetch()} />;
   const rows = (details.data ?? []).flatMap((d) =>
     d.issues.filter((i) => ["repair_attempted", "awaiting_verification", "verified_fixed", "reopened", "blocked"].includes(i.state))
-      .map((i) => ({ run: d, issue: i })),
+      .map((i) => ({ run: d.run, issue: i })),
   );
 
   return (

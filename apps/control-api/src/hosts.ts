@@ -180,11 +180,37 @@ export function createGitLabHost(
     },
 
     async runTargetedTests(runId, a) {
-      await syncTestWorkspace(runId, a.commitSha);
+      try {
+        await syncTestWorkspace(runId, a.commitSha);
+      } catch (err) {
+        return [{
+          commitSha: a.commitSha,
+          environment: "local",
+          suite: "workspace:pin",
+          platform: "server",
+          passed: false,
+          durationMs: 0,
+          failureSummary: redactSecrets(msg(err)),
+          timestamp: new Date().toISOString(),
+        }];
+      }
       return runWorkspaceSuites(workspaceRoot, runId, a.commitSha, "targeted");
     },
     async runFullRegression(runId, a) {
-      await syncTestWorkspace(runId, a.commitSha);
+      try {
+        await syncTestWorkspace(runId, a.commitSha);
+      } catch (err) {
+        return [{
+          commitSha: a.commitSha,
+          environment: "local",
+          suite: "workspace:pin",
+          platform: "server",
+          passed: false,
+          durationMs: 0,
+          failureSummary: redactSecrets(msg(err)),
+          timestamp: new Date().toISOString(),
+        }];
+      }
       return runWorkspaceSuites(workspaceRoot, runId, a.commitSha, "full");
     },
     async runSecurityScan(): Promise<SecurityScanResult> {

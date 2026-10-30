@@ -3,6 +3,7 @@ export const useUi = create((set) => ({
     apiKeySet: Boolean(localStorage.getItem("ads_api_key") ?? import.meta.env.VITE_API_KEY),
     refreshToken: 0,
     markApiKeySet: () => set({ apiKeySet: true }),
+    requireApiKey: () => set({ apiKeySet: false }),
     bump: () => set((s) => ({ refreshToken: s.refreshToken + 1 })),
 }));
 export function statePill(state) {

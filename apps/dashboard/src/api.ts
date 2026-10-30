@@ -87,7 +87,8 @@ export interface RunSummary {
   finishedAt?: string;
 }
 
-export interface RunDetail extends RunSummary {
+export interface RunDetail {
+  run: RunSummary;
   issues: Issue[];
   gates: Array<{ gate: string; passed: boolean; detail: string; required: boolean }>;
   metrics: Record<string, number | string | null>;

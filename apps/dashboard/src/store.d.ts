@@ -2,6 +2,7 @@ interface UiState {
     apiKeySet: boolean;
     refreshToken: number;
     markApiKeySet: () => void;
+    requireApiKey: () => void;
     bump: () => void;
 }
 export declare const useUi: import("zustand").UseBoundStore<import("zustand").StoreApi<UiState>>;
