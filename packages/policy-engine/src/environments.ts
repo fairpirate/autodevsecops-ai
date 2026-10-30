@@ -33,6 +33,8 @@ export function checkEnvironmentEligibility(
   }
   if (release.securityScanStatus === "fail") {
     reasons.push("Release security scan failed");
+  } else if (policy.requireSecurityScan && release.securityScanStatus !== "pass") {
+    reasons.push("Release security scan has not run");
   }
   if (release.qualityGateDecision !== "pass") {
     reasons.push(`Quality gate decision is '${release.qualityGateDecision}', not 'pass'`);

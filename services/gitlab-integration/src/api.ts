@@ -73,6 +73,17 @@ export class GitLabApi {
     });
   }
 
+  async listCommitsPage(id: number, ref: string, page: number, perPage: number) {
+    const { data, headers } = await this.client.request<GitLabCommitInfo[]>(
+      "GET", `/api/v4/projects/${id}/repository/commits`,
+      { query: { ref_name: ref, page, per_page: perPage } },
+    );
+    // GitLab commits do not always include totals or pagination headers.
+    const next = headers.get("x-next-page");
+    const hasNext = next !== null ? Boolean(next) : data.length === perPage;
+    return { items: data, page, perPage, hasNext };
+  }
+
   async getCommit(idOrPath: number | string, sha: string): Promise<GitLabCommitInfo> {
     const { data } = await this.client.request<GitLabCommitInfo>(
       "GET",

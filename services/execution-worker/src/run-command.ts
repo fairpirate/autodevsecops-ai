@@ -5,10 +5,11 @@ import { makeResult } from "@ads/test-adapters";
 /** Redact secret material from captured output before storing/returning logs. */
 export function redactSecrets(text: string): string {
   return text
-    .replace(/glpat-[A-Za-z0-9_\-]{10,}/g, "glpat-***")
+    .replace(/glpat-[A-Za-z0-9_.\-]{10,}/g, "glpat-***")
     .replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, "Bearer ***")
     .replace(/(PRIVATE-TOKEN|Authorization):\s*\S+/gi, "$1: ***")
-    .replace(/(password|secret|token)=\S+/gi, "$1=***");
+    .replace(/((?:["']?(?:password|secret|token|api[_-]?key|access[_-]?token)["']?)\s*[:=]\s*)(["'])(.*?)\2/gi, "$1$2***$2")
+    .replace(/(password|secret|token|api[_-]?key)=\S+/gi, "$1=***");
 }
 
 export interface CommandTestOptions {
