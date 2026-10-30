@@ -2,7 +2,8 @@
 #
 # Base: infrastructure/docker/docker-compose.yml (local full-stack simulation).
 # This overlay hardens it for production:
-#   * Postgres and Redis bind to 127.0.0.1 only — not publicly reachable.
+#   * Postgres and Redis use the Docker network only; no host ports.
+#   * Requires Docker Compose >=2.24.4 for !override port replacement.
 #   * The control API binds to 127.0.0.1:4000; host Nginx terminates TLS.
 #   * The dashboard container serves the built frontend on 127.0.0.1:8080.
 #   * restart: unless-stopped on every service.
@@ -33,8 +34,7 @@ services:
     extends:
       file: docker-compose.yml
       service: postgres
-    ports:
-      - "127.0.0.1:5432:5432"
+    ports: !override []
     restart: unless-stopped
     deploy:
       resources:
@@ -50,8 +50,7 @@ services:
     extends:
       file: docker-compose.yml
       service: redis
-    ports:
-      - "127.0.0.1:6379:6379"
+    ports: !override []
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     restart: unless-stopped
     deploy:
@@ -68,7 +67,7 @@ services:
     extends:
       file: docker-compose.yml
       service: control-api
-    ports:
+    ports: !override
       - "127.0.0.1:4000:4000"
     restart: unless-stopped
     environment:
@@ -97,7 +96,7 @@ services:
     extends:
       file: docker-compose.yml
       service: dashboard
-    ports:
+    ports: !override
       - "127.0.0.1:8080:80"
     restart: unless-stopped
     logging:

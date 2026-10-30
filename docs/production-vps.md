@@ -20,8 +20,8 @@ terminating TLS (Certbot/Let's Encrypt).
                               -> 127.0.0.1:8080 dashboard container
                               -> /var/www/letsencrypt (certbot)
 [docker compose]
-  - postgres:16   (127.0.0.1:5432, not public)
-  - redis:7       (127.0.0.1:6379, not public)
+  - postgres:16   (Docker network only, no host port)
+  - redis:7       (Docker network only, no host port)
   - control-api   (migrate + server; health-checked)
   - dashboard     (built Vite app, served by nginx)
   - [workers]     (optional --profile workers)
@@ -57,7 +57,7 @@ reach the VPS.
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 # log out and back in (or newgrp docker) so the docker group applies
-docker compose version   # expect Compose v2 plugin
+docker compose version   # requires >=2.24.4 for !override port replacement
 ```
 
 ## 4. Clone the repository and configure production environment
@@ -178,8 +178,10 @@ sudo ufw allow 443/tcp
 sudo ufw enable
 ```
 
-Postgres (5432) and Redis (6379) are bound to 127.0.0.1 only and must never
-be exposed. Fail2Ban protects SSH by default.
+Postgres (5432) and Redis (6379) are reachable only inside the Compose network;
+production publishes neither port on the host. This avoids conflicts with
+other projects' database and Redis services. The API still connects to
+`postgres:5432` and `redis:6379`. Fail2Ban protects SSH by default.
 
 ## 8. GitLab integration
 

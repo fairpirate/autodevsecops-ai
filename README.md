@@ -188,7 +188,8 @@ dashboard) plus host Nginx for TLS termination (Certbot/Let's Encrypt).
 Production-specific files:
 
 - `infrastructure/docker/docker-compose.prod.yml` — production Compose overlay
-  (DB/Redis on 127.0.0.1 only, restart policies, log rotation, API healthcheck).
+  (DB/Redis internal to Docker, restart policies, log rotation, API healthcheck;
+  requires Docker Compose >=2.24.4).
 - `infrastructure/env/production.env.example` — production `.env` template.
 - `infrastructure/systemd/ads-api.service` — optional systemd unit for the API.
 - `scripts/vps-deploy.sh` — end-to-end deploy script.
