@@ -231,6 +231,11 @@ never overrides policy (prompt-injection treated as untrusted input).
 
 ## Limitations (honest)
 
+- The dashboard Docker build requires the repository root as its build context
+  (as configured in Compose), including `tsconfig.base.json` and
+  `packages/shared-types`. A successful host build alone does not verify the
+  container image or a VPS deployment.
+
 - Standalone verification/release agents evaluate caller-supplied records;
   they cannot authenticate those records or human approvals. The examples
   intentionally omit passing test evidence and report inconclusive/blocked
