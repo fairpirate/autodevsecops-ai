@@ -39,3 +39,11 @@ You are the **release agent**. For a release candidate:
   "evidenceLinks": {"pipeline": "...", "trace": "...", "scans": "..."}
 }
 ```
+
+## Executable entry point
+
+Run `npm run agent:release -- --input agents/examples/release.json`.
+See [the agent runtime guide](../README.md) for the actual JSON input contract,
+provider selection, and the distinction between standalone advisory output and
+authoritative orchestrator execution. This specification describes the intended
+role; the runtime guide documents the implemented scope.

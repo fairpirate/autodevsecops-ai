@@ -38,3 +38,11 @@ agent's self-assessment. For each repaired issue:
   "reviewer": "independent-verification-agent"
 }
 ```
+
+## Executable entry point
+
+Run `npm run agent:verification -- --input agents/examples/verification.json`.
+See [the agent runtime guide](../README.md) for the actual JSON input contract,
+provider selection, and the distinction between standalone advisory output and
+authoritative orchestrator execution. This specification describes the intended
+role; the runtime guide documents the implemented scope.

@@ -25,3 +25,11 @@ configuration, inadequate input validation, insecure deployment configuration.
 Same `{"findings": [...]}` envelope as Agent A, with `category` set to
 `security` / `dependency_vulnerability` and `blocksRelease: true` for
 critical/high severities.
+
+## Executable entry point
+
+Run `npm run agent:security-review -- --input agents/examples/review.json`.
+See [the agent runtime guide](../README.md) for the actual JSON input contract,
+provider selection, and the distinction between standalone advisory output and
+authoritative orchestrator execution. This specification describes the intended
+role; the runtime guide documents the implemented scope.

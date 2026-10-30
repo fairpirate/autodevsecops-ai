@@ -1,4 +1,5 @@
 import type { NewIssueInput } from "@ads/issue-ledger";
+import { redactSecrets } from "@ads/execution-worker";
 import type { FileMap } from "./ports";
 
 const JS_EXT = /\.(m?jsx?|ts|tsx)$/;
@@ -140,7 +141,7 @@ function applyRule(rule: Rule, runId: string, sha: string, filePath: string, con
   const m = rule.pattern.exec(content);
   if (!m) return null;
   const line = lineOf(content, m.index);
-  const snippet = content.split("\n")[line - 1]?.trim().slice(0, 200) ?? "";
+  const snippet = redactSecrets(content.split("\n")[line - 1]?.trim() ?? "").slice(0, 200);
   const blocksRelease = !rule.advisory && (rule.severity === "critical" || rule.severity === "high");
   return {
     ruleId: rule.id,
@@ -203,9 +204,9 @@ export function runSecurityReview(runId: string, sha: string, files: FileMap): S
 }
 
 /** Whether a specific rule still matches file content (used by verification). */
-export function ruleStillMatches(ruleId: string, filePath: string, content: string): boolean {
+export function ruleStillMatches(ruleId: string, filePath: string, content: string): boolean | undefined {
   const rule = [...CODE_RULES, ...SECURITY_RULES].find((r) => r.id === ruleId);
-  if (!rule) return false;
+  if (!rule) return undefined;
   rule.pattern.lastIndex = 0;
   return rule.pattern.test(content);
 }

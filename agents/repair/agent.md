@@ -39,3 +39,11 @@ You are the **repair agent**. For each approved repair task:
   "tokensUsed": 1234
 }
 ```
+
+## Executable entry point
+
+Run `npm run agent:repair -- --input agents/examples/repair.json`.
+See [the agent runtime guide](../README.md) for the actual JSON input contract,
+provider selection, and the distinction between standalone advisory output and
+authoritative orchestrator execution. This specification describes the intended
+role; the runtime guide documents the implemented scope.

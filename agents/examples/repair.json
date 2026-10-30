@@ -1,0 +1,36 @@
+{
+  "issue": {
+    "id": "example-issue",
+    "runId": "example-run",
+    "dedupKey": "example-weak-hash",
+    "title": "AVSS05: Weak hash algorithm (md5/sha1)",
+    "description": "A security-sensitive digest uses the collision-prone MD5 algorithm.",
+    "category": "security",
+    "severity": "high",
+    "confidence": 0.95,
+    "filePath": "src/digest.js",
+    "lineStart": 2,
+    "evidence": [
+      {
+        "kind": "analyzer_rule",
+        "description": "MD5 matched in the digest implementation",
+        "reference": "AVSS05 @ src/digest.js:2"
+      }
+    ],
+    "impact": "Digest collisions undermine integrity checks.",
+    "remediation": "Use SHA-256 while preserving the digest interface.",
+    "verificationMethod": "Rescan the hash and execute the digest regression test.",
+    "blocksRelease": true,
+    "state": "triaged",
+    "discoverySource": "deterministic:security-review",
+    "affectedRevision": "source-revision",
+    "history": [],
+    "repairAttempts": 0
+  },
+  "files": {
+    "src/digest.js": "const { createHash } = require(\"node:crypto\");\nexports.digest = (value) => createHash(\"md5\").update(value).digest(\"hex\");\n"
+  },
+  "provider": "deterministic",
+  "iteration": 1,
+  "maxPatchSizeLines": 40
+}

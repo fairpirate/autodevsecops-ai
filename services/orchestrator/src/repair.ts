@@ -6,8 +6,8 @@ import type { FileMap } from "./ports";
  *
  * Produces the SMALLEST reasonable patch for an approved repair task inside
  * an isolated workspace. Deterministic transforms are applied first; when the
- * repair requires reasoning the caller dispatches a GitLab Duo flow
- * (never an unrelated LLM substitute when flows are disabled).
+ * repair requires reasoning the caller explicitly selects the Nebius provider
+ * or an available GitLab Duo flow. Provider identity is never hidden.
  *
  * Guardrails enforced here:
  *  - never touches protected branches (branch name is always namespaced)
@@ -57,8 +57,8 @@ function ruleIdOf(issue: IssueRecord): string | undefined {
 
 /**
  * Attempt a deterministic repair for one issue.
- * Returns null when the fix requires AI reasoning (caller dispatches a Duo
- * flow) or must be escalated to a human — we never fabricate a patch.
+ * Returns null when the fix requires AI reasoning (caller selects a configured
+ * provider) or must be escalated to a human — we never fabricate a patch.
  */
 export function attemptDeterministicRepair(
   issue: IssueRecord,

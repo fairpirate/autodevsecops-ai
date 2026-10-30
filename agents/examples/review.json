@@ -1,0 +1,10 @@
+{
+  "runId": "example-run",
+  "commitSha": "source-revision",
+  "files": {
+    "src/app.js": "export function run() { try { work(); } catch (error) {} }\n",
+    "src/digest.js": "const { createHash } = require(\"node:crypto\");\nexports.digest = (value) => createHash(\"md5\").update(value).digest(\"hex\");\n",
+    "src/app.test.js": "// Example test path only; this file is not executed by the review agent.",
+    "src/digest.test.js": "// Example test path only; no test execution is claimed."
+  }
+}

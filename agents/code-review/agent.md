@@ -54,3 +54,11 @@ backward-compatibility risks.
 Severity guidance: critical = exploitable / data loss / prod down;
 high = blocks release by default; medium/low/info = advisory unless policy says
 otherwise. Security severities are never auto-suppressed.
+
+## Executable entry point
+
+Run `npm run agent:code-review -- --input agents/examples/review.json`.
+See [the agent runtime guide](../README.md) for the actual JSON input contract,
+provider selection, and the distinction between standalone advisory output and
+authoritative orchestrator execution. This specification describes the intended
+role; the runtime guide documents the implemented scope.
