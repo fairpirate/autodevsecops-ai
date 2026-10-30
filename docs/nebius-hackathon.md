@@ -63,6 +63,9 @@ Join the hackathon on Devpost as well as signing up for Token Factory. Account r
 
 ## Devpost description draft
 
+For the full narrative organized into Devpost's seven requested sections, use
+[Autonomous DevSecOps AI Platform — submission text](devpost-submission.md).
+
 **Tagline:** AI proposes a repair. Executed tests decide whether it worked.
 
 **Problem:** Small engineering teams can find defects faster than they can confidently repair and release them. Generated patches need evidence before promotion.

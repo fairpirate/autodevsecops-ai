@@ -54,6 +54,22 @@ The dashboard loads the root `.env` and proxies `/api` to
 origin. Restart `npm run dev:dashboard` after changing these settings. A request
 to `http://localhost:5173/api/v1/health` should return JSON, not the dashboard HTML.
 
+### Dashboard authentication and GitLab access
+
+The dashboard API key and GitLab access token have separate purposes:
+
+- In the running backend's `.env`, `API_KEYS=your-dashboard-key:admin` authorizes
+  dashboard requests. Enter only `your-dashboard-key` in **Dashboard API key**.
+  Restart the backend after changing `API_KEYS`.
+- Enter the GitLab project ID and GitLab access token in **Connect a GitLab project**.
+- `NEBIUS_API_KEY` stays in the backend environment for model inference.
+
+An **Invalid control API key** error occurs before the GitLab request. Use
+**Change dashboard API key** to validate and save the matching backend key.
+The key form also reopens automatically when the backend rejects a saved key.
+For an older deployed dashboard without that button, remove `ads_api_key` from
+the site's browser Local Storage and reload to show the key form again.
+
 ### Full stack with Postgres + Redis (Docker Compose)
 
 For `https://autodevsecops.spiritedrobot.in` on a VPS, use the
@@ -122,10 +138,29 @@ services/gitlab-integration  REST client (rate-limit/pagination), webhooks, Duo 
 services/execution-worker     Time-limited, secret-redacted test execution (+BullMQ)
 services/artifact-service     Immutable artifacts, releases, provenance, approvals
 packages/*           shared-types, workflow-engine, issue-ledger, policy-engine, test-adapters
-agents/              Five agent specs (review/security/repair/verification/release)
+agents/              Five executable agent entry points, prompt specs and JSON examples
 infrastructure/      Dockerfiles, docker-compose, env + deployment manifests
 .gitlab-ci.yml       validate → test → build → security → deploy (protected envs)
 ```
+
+## Run individual agents
+
+The agents reuse the orchestrator's implementation. After `npm install` and
+`npm run typecheck`, run an individual role with validated JSON input:
+
+```bash
+npm run agent:code-review -- --input agents/examples/review.json
+npm run agent:security-review -- --input agents/examples/review.json
+npm run agent:repair -- --input agents/examples/repair.json
+npm run agent:verification -- --input agents/examples/verification.json
+npm run agent:release -- --input agents/examples/release.json
+```
+
+These examples run without credentials. Repair returns a proposal without
+applying it. Verification and release evaluate supplied records without changing
+workflow state or deploying. See [agents/README.md](agents/README.md) for JSON
+contracts and explicit Nebius inference. The orchestrator owns authoritative
+execution; a standalone JSON report does not authorize a release.
 
 ## API (versioned, authenticated, validated)
 
@@ -162,6 +197,12 @@ never overrides policy (prompt-injection treated as untrusted input).
 
 ## Limitations (honest)
 
+- Standalone verification/release agents evaluate caller-supplied records;
+  they cannot authenticate those records or human approvals. The examples
+  intentionally omit passing test evidence and report inconclusive/blocked
+  outcomes. Prompt specifications describe broader goals than the current
+  deterministic review rules; automated test generation is not implemented.
+
 - Nebius requires `AI_PROVIDER=nebius`, a server-side `NEBIUS_API_KEY`, and
   `QUEUE_DRIVER=memory`. Distributed Nebius orchestration is not wired; that
   configuration is rejected at startup. The local live demo does not prove
@@ -183,3 +224,14 @@ never overrides policy (prompt-injection treated as untrusted input).
   platform runs deterministically and says so.
 - Local Docker Compose simulates env separation; real staging/production are
   the protected GitLab environments in CI.
+
+### Review a connected project's commits
+
+Connecting a GitLab project opens **Review Runs** with that project selected.
+For an existing connection, choose **Review commits** on Projects or select it
+in Review Runs. Commits load 20 at a time from GitLab; use Previous/Next to
+browse, or enter a branch/tag and choose Load commits. Select a commit and click
+**Run review** to start the existing review/repair/verification flow at that
+exact SHA and open its live run details. Changing project, branch or page clears
+the selection. GitLab tokens remain on the server. If GitLab omits pagination
+headers, a full final page may be followed by an empty page; use Previous.
