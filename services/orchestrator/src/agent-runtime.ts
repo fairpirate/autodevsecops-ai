@@ -5,13 +5,14 @@ import { analyzeMissingTests, runCodeReview, runSecurityReview } from "./analyze
 import { assertNoModelSecrets, isModelSourcePath, type AIRepairProvider } from "./nebius";
 import { attemptDeterministicRepair, unifiedDiff } from "./repair";
 import { verifyRepair } from "./verification";
+import { createTavilySearcher, type TavilySearcher } from "./tavily";
 import { repairAgentInputSchema, releaseAgentInputSchema, reviewAgentInputSchema, verificationAgentInputSchema } from "./agent-schemas";
 
 export const AGENT_NAMES = ["code-review", "security-review", "repair", "verification", "release"] as const;
 export type AgentName = (typeof AGENT_NAMES)[number];
 
 /** Standalone role execution; never changes workflow state, writes patches, or deploys. */
-export async function executeAgent(name: AgentName, input: unknown, deps: { aiRepair?: AIRepairProvider } = {}) {
+export async function executeAgent(name: AgentName, input: unknown, deps: { aiRepair?: AIRepairProvider; tavilySearch?: TavilySearcher } = {}) {
   switch (name) {
     case "code-review":
     case "security-review": {
@@ -20,8 +21,53 @@ export async function executeAgent(name: AgentName, input: unknown, deps: { aiRe
         ? runSecurityReview(request.runId, request.commitSha, request.files)
         : [...runCodeReview(request.runId, request.commitSha, request.files),
           ...analyzeMissingTests(request.runId, request.commitSha, request.files, request.changedPaths ?? Object.keys(request.files))];
+
+      // Enrich dependency_vulnerability findings with live CVE/advisory context
+      // from Tavily web search. Degradation-safe: deterministic findings remain
+      // even when TAVILY_API_KEY is absent or the search call fails.
+      const enriched = await Promise.all(findings.map(async (finding) => {
+        if (name !== "security-review" || finding.input.category !== "dependency_vulnerability" || !deps.tavilySearch) {
+          return finding;
+        }
+        try {
+          const search = await deps.tavilySearch.search({
+            query: `${finding.input.title} CVE advisory`,
+            maxResults: 3,
+            includeAnswer: true,
+            includeRawContent: false,
+            searchDepth: "basic",
+          });
+          const webEvidence: typeof finding.input.evidence = [
+            ...finding.input.evidence,
+            ...search.results.map((r) => ({
+              kind: "ai_finding" as const,
+              description: r.title,
+              reference: r.url,
+              snippet: r.content.slice(0, 300),
+            })),
+          ];
+          if (search.answer) {
+            webEvidence.push({
+              kind: "ai_finding" as const,
+              description: "Tavily answer: " + search.answer.slice(0, 300),
+              reference: "tavily://answer",
+            });
+          }
+          return {
+            ...finding,
+            input: {
+              ...finding.input,
+              evidence: webEvidence,
+              discoverySource: `${finding.input.discoverySource}+tavily`,
+            },
+          };
+        } catch {
+          return finding;
+        }
+      }));
+
       const ledger = new IssueLedger(request.runId);
-      for (const finding of findings) ledger.addFinding(finding.input);
+      for (const finding of enriched) ledger.addFinding(finding.input);
       return { agent: name, mode: "deterministic", findings: ledger.snapshot() };
     }
     case "repair": {

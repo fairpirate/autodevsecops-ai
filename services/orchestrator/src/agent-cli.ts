@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { redactSecrets } from "@ads/execution-worker";
 import { createNebiusRepairProvider, NebiusRepairError } from "./nebius";
+import { createTavilySearcher } from "./tavily";
 import { executeAgent, type AgentName } from "./agent-runtime";
 
 const MAX_INPUT_BYTES = 2 * 1024 * 1024;
@@ -46,7 +47,8 @@ export async function runAgentCli(name: AgentName): Promise<void> {
       apiKey: process.env.NEBIUS_API_KEY ?? "", model: process.env.NEBIUS_MODEL,
       baseUrl: process.env.NEBIUS_BASE_URL,
     }) : undefined;
-    const result = await executeAgent(name, input, { aiRepair });
+    const tavilySearch = createTavilySearcher(process.env.TAVILY_API_KEY);
+    const result = await executeAgent(name, input, { aiRepair, tavilySearch });
     process.stdout.write(JSON.stringify(redactAgentOutput(result), null, 2) + "\n");
   } catch (error) {
     const code = error instanceof z.ZodError || error instanceof SyntaxError ? "invalid_input" : "agent_failed";
