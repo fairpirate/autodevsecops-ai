@@ -38,6 +38,7 @@ export function verifyRepair(inputs: VerificationInputs): VerificationDecision {
   const ruleId = ruleIdOf(issue);
   const content = issue.filePath ? filesAfter[issue.filePath] : undefined;
   let originalAddressed = false;
+  let originalCheckAvailable = false;
   if (content === undefined) {
     evidence.push({
       kind: "test_failure",
@@ -45,10 +46,13 @@ export function verifyRepair(inputs: VerificationInputs): VerificationDecision {
     });
   } else if (ruleId) {
     const stillMatches = ruleStillMatches(ruleId, issue.filePath!, content);
-    originalAddressed = !stillMatches;
+    originalCheckAvailable = stillMatches !== undefined;
+    originalAddressed = stillMatches === false;
     evidence.push({
       kind: "analyzer_rule",
-      description: stillMatches
+      description: stillMatches === undefined
+        ? `No deterministic check exists for rule ${ruleId}; human review required`
+        : stillMatches
         ? `Rule ${ruleId} STILL matches ${issue.filePath} after repair`
         : `Rule ${ruleId} no longer matches ${issue.filePath} after repair`,
       reference: ruleId,
@@ -100,11 +104,11 @@ export function verifyRepair(inputs: VerificationInputs): VerificationDecision {
   const justifed = repair.explanation.trim().length >= 20 && repair.rootCause.trim().length >= 10;
   const testsOk = targetedOk && regressionOk;
   const verdict: VerificationDecision["verdict"] =
-    originalAddressed && diffOk && testsOk && justifed && regressions.length === 0
+    originalAddressed && diffOk && testsOk && justifed && securityScanPassed === true && regressions.length === 0
       ? "verified_fixed"
       : originalAddressed && regressions.length > 0
         ? "rejected"
-        : !originalAddressed
+        : !originalAddressed && originalCheckAvailable
           ? "rejected"
           : "inconclusive";
 

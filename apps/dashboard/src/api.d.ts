@@ -1,17 +1,31 @@
+export declare const API_AUTH_REQUIRED_EVENT = "ads:api-auth-required";
 export declare function setApiKey(key: string): void;
 export declare const api: {
+    validateApiKey: (key: string) => Promise<{
+        items: unknown[];
+    }>;
     health: () => Promise<{
         ok: boolean;
         store: string;
     }>;
     projects: () => Promise<{
-        items: unknown[];
+        items: ConnectedProject[];
     }>;
-    connectProject: (body: Record<string, unknown>) => Promise<unknown>;
+    connectProject: (body: Record<string, unknown>) => Promise<{
+        project: ConnectedProject;
+    }>;
+    commits: (projectId: string, ref: string, page: number) => Promise<{
+        items: ProjectCommit[];
+        page: number;
+        perPage: number;
+        hasNext: boolean;
+    }>;
     runs: (params?: string) => Promise<{
         items: RunSummary[];
     }>;
-    createRun: (body: Record<string, unknown>) => Promise<unknown>;
+    createRun: (body: Record<string, unknown>) => Promise<{
+        run: RunSummary;
+    }>;
     runDetail: (id: string) => Promise<RunDetail>;
     runIssues: (id: string) => Promise<{
         items: Issue[];
@@ -57,7 +71,8 @@ export interface RunSummary {
     updatedAt: string;
     finishedAt?: string;
 }
-export interface RunDetail extends RunSummary {
+export interface RunDetail {
+    run: RunSummary;
     issues: Issue[];
     gates: Array<{
         gate: string;
@@ -142,4 +157,18 @@ export declare function subscribeRunEvents(runId: string, onEvent: (e: {
     type: string;
     payload: unknown;
 }) => void): () => void;
+export interface ConnectedProject {
+    id: string;
+    name: string;
+    pathWithNamespace: string;
+    defaultBranch: string;
+    webUrl: string;
+}
+export interface ProjectCommit {
+    id: string;
+    short_id: string;
+    title: string;
+    author_name: string;
+    created_at: string;
+}
 //# sourceMappingURL=api.d.ts.map

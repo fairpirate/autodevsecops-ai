@@ -19,6 +19,10 @@ const envSchema = z.object({
   GITLAB_FLOW_CALLBACK_HOOK_ID: z.string().default(""),
   DUO_FLOW_DEFINITION: z.string().default(""),
   DUO_FLOWS_ENABLED: z.enum(["true", "false"]).default("false"),
+  AI_PROVIDER: z.enum(["deterministic", "nebius"]).default("deterministic"),
+  NEBIUS_API_KEY: z.string().default(""),
+  NEBIUS_BASE_URL: z.string().url().default("https://api.tokenfactory.us-central1.nebius.com/v1"),
+  NEBIUS_MODEL: z.string().default("nvidia/nemotron-3-super-120b-a12b"),
   AI_FALLBACK_MODE: z.enum(["strict", "permissive"]).default("strict"),
   EXEC_WORK_DIR: z.string().default("./.exec-workspace"),
   EXEC_JOB_TIMEOUT_MS: z.coerce.number().default(600_000),
@@ -33,6 +37,12 @@ export type Config = z.infer<typeof envSchema> & {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = envSchema.parse(env);
+  if (parsed.AI_PROVIDER === "nebius" && !parsed.NEBIUS_API_KEY.trim()) {
+    throw new Error("AI_PROVIDER=nebius requires NEBIUS_API_KEY in the server environment");
+  }
+  if (parsed.AI_PROVIDER === "nebius" && parsed.QUEUE_DRIVER !== "memory") {
+    throw new Error("Nebius currently requires QUEUE_DRIVER=memory (embedded orchestrator)");
+  }
   const apiKeys = parsed.API_KEYS.split(",")
     .map((entry) => entry.trim())
     .filter(Boolean)

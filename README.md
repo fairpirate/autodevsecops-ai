@@ -1,7 +1,22 @@
 # AutoDevSecOps AI — Review. Repair. Verify. Test. Deploy.
 
 Production-oriented, AI-powered autonomous software quality assurance and
-deployment platform for the GitLab Transcend hackathon.
+deployment platform adapted for the Nebius x NVIDIA Global AI Hackathon,
+**Coding and Agentic Engineering** track. NVIDIA Nemotron on Nebius Token
+Factory generates repair proposals; executed tests and independent scanners
+determine whether a fix is verified. Licensed under [MIT](LICENSE).
+
+Competition setup, reproducible live demo, requirements, submission draft and
+video storyboard: [Nebius hackathon guide](docs/nebius-hackathon.md).
+
+```bash
+# After npm install, configure NEBIUS_API_KEY in a private root .env:
+npm run demo:nebius
+```
+
+The demo makes a real Token Factory call and executes real Node tests in a
+temporary workspace. It requires model access and credits; no live inference
+result is claimed until that command succeeds.
 
 ## What it does
 
@@ -33,7 +48,33 @@ npm run dev:dashboard # dashboard on http://localhost:5173 (proxies /api)
 
 Health check: `GET http://localhost:4000/api/v1/health` → `{"status":"ok"}`.
 
+The dashboard loads the root `.env` and proxies `/api` to
+`CONTROL_API_BASE_URL` (default `http://localhost:4000`). Leave
+`VITE_API_BASE_URL` empty for this local proxy, or set it to your separate API
+origin. Restart `npm run dev:dashboard` after changing these settings. A request
+to `http://localhost:5173/api/v1/health` should return JSON, not the dashboard HTML.
+
+### Dashboard authentication and GitLab access
+
+The dashboard API key and GitLab access token have separate purposes:
+
+- In the running backend's `.env`, `API_KEYS=your-dashboard-key:admin` authorizes
+  dashboard requests. Enter only `your-dashboard-key` in **Dashboard API key**.
+  Restart the backend after changing `API_KEYS`.
+- Enter the GitLab project ID and GitLab access token in **Connect a GitLab project**.
+- `NEBIUS_API_KEY` stays in the backend environment for model inference.
+
+An **Invalid control API key** error occurs before the GitLab request. Use
+**Change dashboard API key** to validate and save the matching backend key.
+The key form also reopens automatically when the backend rejects a saved key.
+For an older deployed dashboard without that button, remove `ads_api_key` from
+the site's browser Local Storage and reload to show the key form again.
+
 ### Full stack with Postgres + Redis (Docker Compose)
+
+For `https://autodevsecops.spiritedrobot.in` on a VPS, use the
+[Nginx configuration and HTTPS setup guide](infrastructure/nginx/README.md).
+It serves the built dashboard and routes `/api/` to the local control API.
 
 ```bash
 docker compose -f infrastructure/docker/docker-compose.yml up --build
@@ -44,26 +85,25 @@ docker compose -f infrastructure/docker/docker-compose.yml up --build
 Set `STORE=prisma`, `DATABASE_URL=...`, `QUEUE_DRIVER=bullmq` in `.env`
 for the persistent deployment (see `infrastructure/`).
 
-## Demo end-to-end (no GitLab token needed)
+## GitLab workflow (GitLab token required)
 
-The API test harness (`tests/fixtures/api-harness.ts`) runs the whole closed
-loop against a fixture repo with real detectable defects (empty catch,
-`innerHTML`, weak hash). Reproduce it live:
+The API test harness (`tests/fixtures/api-harness.ts`) uses mocked GitLab and
+test hosts. For a real GitLab run, connect your project with an actual token:
 
 ```bash
 npm run dev:api
 curl -X POST localhost:4000/api/v1/projects/connect \
-  -H "Authorization: Bearer dev-admin-key" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dev-admin-key-change-me" -H "Content-Type: application/json" \
   -d '{"gitlabBaseUrl":"https://gitlab.com","token":"glpat-...","gitlabProjectId":123}'
 curl -X POST localhost:4000/api/v1/runs \
-  -H "Authorization: Bearer dev-eng-key" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dev-admin-key-change-me" -H "Content-Type: application/json" \
   -d '{"projectId":"<id>","ref":"main"}'
-curl -N localhost:4000/api/v1/runs/<runId>/events?token=dev-eng-key
+curl -N localhost:4000/api/v1/runs/<runId>/events?token=dev-admin-key-change-me
 ```
 ## GitLab Duo Agent Platform integration (real, not mocked)
 
 **Status: real integration via the documented Flows API; deterministic
-analyzers run when flows are disabled — never an unrelated LLM substitute.**
+analyzers run when flows are disabled — the Nebius provider is a separate, explicitly selected integration.**
 
 | Piece | Implementation |
 |---|---|
@@ -84,7 +124,7 @@ DUO_FLOW_DEFINITION=developer/v1   # or custom flow id/version from the AI Catal
 GITLAB_FLOW_CALLBACK_HOOK_ID=42
 ```
 
-When `DUO_FLOWS_ENABLED=false` (default), the orchestrator records AI tasks as
+When no Nebius provider is selected and `DUO_FLOWS_ENABLED=false` (default), the orchestrator records AI tasks as
 `unavailable`, continues with deterministic repairs, and labels the limitation
 in run evidence.
 
@@ -98,10 +138,29 @@ services/gitlab-integration  REST client (rate-limit/pagination), webhooks, Duo 
 services/execution-worker     Time-limited, secret-redacted test execution (+BullMQ)
 services/artifact-service     Immutable artifacts, releases, provenance, approvals
 packages/*           shared-types, workflow-engine, issue-ledger, policy-engine, test-adapters
-agents/              Five agent specs (review/security/repair/verification/release)
+agents/              Five executable agent entry points, prompt specs and JSON examples
 infrastructure/      Dockerfiles, docker-compose, env + deployment manifests
 .gitlab-ci.yml       validate → test → build → security → deploy (protected envs)
 ```
+
+## Run individual agents
+
+The agents reuse the orchestrator's implementation. After `npm install` and
+`npm run typecheck`, run an individual role with validated JSON input:
+
+```bash
+npm run agent:code-review -- --input agents/examples/review.json
+npm run agent:security-review -- --input agents/examples/review.json
+npm run agent:repair -- --input agents/examples/repair.json
+npm run agent:verification -- --input agents/examples/verification.json
+npm run agent:release -- --input agents/examples/release.json
+```
+
+These examples run without credentials. Repair returns a proposal without
+applying it. Verification and release evaluate supplied records without changing
+workflow state or deploying. See [agents/README.md](agents/README.md) for JSON
+contracts and explicit Nebius inference. The orchestrator owns authoritative
+execution; a standalone JSON report does not authorize a release.
 
 ## API (versioned, authenticated, validated)
 
@@ -138,9 +197,41 @@ never overrides policy (prompt-injection treated as untrusted input).
 
 ## Limitations (honest)
 
+- Standalone verification/release agents evaluate caller-supplied records;
+  they cannot authenticate those records or human approvals. The examples
+  intentionally omit passing test evidence and report inconclusive/blocked
+  outcomes. Prompt specifications describe broader goals than the current
+  deterministic review rules; automated test generation is not implemented.
+
+- Nebius requires `AI_PROVIDER=nebius`, a server-side `NEBIUS_API_KEY`, and
+  `QUEUE_DRIVER=memory`. Distributed Nebius orchestration is not wired; that
+  configuration is rejected at startup. The local live demo does not prove
+  GitLab integration, public hosting, or production deployment.
+- Model patches are limited to one existing source file per finding; tests,
+  configuration, policies, credentials and large files are excluded. Invalid
+  responses and provider failures block the issue. Automated filtering cannot
+  prove arbitrary repository content contains no secrets; use a sanitized test
+  repository. Model reasoning and token use can exhaust the output budget.
+- Existing GitLab projects need dependencies/runtimes provisioned in their
+  test environment. The host pins executed tests to the repaired commit; an
+  unavailable workspace or checkout cannot establish a verified fix.
+- A public demo/build URL, public repository, real inference evidence, service
+  feedback and public YouTube video remain submission tasks; see the guide.
+
 - Mobile: Android debug builds + API/startup checks implemented; iOS needs a
   macOS runner (documented, not claimed); Appium device testing is opt-in.
 - Duo flows require the GitLab-side prerequisites above; without them the
   platform runs deterministically and says so.
 - Local Docker Compose simulates env separation; real staging/production are
   the protected GitLab environments in CI.
+
+### Review a connected project's commits
+
+Connecting a GitLab project opens **Review Runs** with that project selected.
+For an existing connection, choose **Review commits** on Projects or select it
+in Review Runs. Commits load 20 at a time from GitLab; use Previous/Next to
+browse, or enter a branch/tag and choose Load commits. Select a commit and click
+**Run review** to start the existing review/repair/verification flow at that
+exact SHA and open its live run details. Changing project, branch or page clears
+the selection. GitLab tokens remain on the server. If GitLab omits pagination
+headers, a full final page may be followed by an empty page; use Previous.

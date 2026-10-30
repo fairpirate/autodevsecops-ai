@@ -8,7 +8,9 @@
     { "path": "../../packages/policy-engine" },
     { "path": "../../packages/workflow-engine" },
     { "path": "../../packages/test-adapters" },
-    { "path": "../gitlab-integration" }
+    { "path": "../gitlab-integration" },
+    { "path": "../artifact-service" },
+    { "path": "../execution-worker" }
   ],
   "dependencies": {
     "bullmq": "5.34.5",

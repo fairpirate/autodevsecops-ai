@@ -124,6 +124,24 @@ export function buildRouter(deps: AppDeps): Router {
     const { tokenEncrypted: _t, ...projectDto } = project;
     res.json({ project: projectDto, ...extra });
   });
+  router.get("/projects/:id/commits", async (req, res) => {
+    const parsed = paginationSchema.extend({ ref: z.string().trim().min(1).optional() }).safeParse(req.query);
+    if (!parsed.success) return badRequest(res, parsed.error.flatten());
+    const project = await store.projects.get(req.params.id);
+    if (!project) return notFound(res, "Project");
+    const { api } = createGitLabService({
+      baseUrl: project.gitlabBaseUrl,
+      token: deps.vault.decrypt(project.tokenEncrypted),
+      duoFlowsEnabled: config.duoFlowsEnabled,
+    });
+    try {
+      const { page, perPage, ref } = parsed.data;
+      res.json(await api.listCommitsPage(project.gitlabProjectId, ref ?? project.defaultBranch, page, perPage));
+    } catch {
+      res.status(502).json({ error: { code: "gitlab_unreachable", message: "Unable to load commits from GitLab. Check project access and the branch or tag." } });
+    }
+  });
+
   /* --------------------------- Runs --------------------------- */
 
   router.post("/runs", requireRole("engineer"), async (req: Request, res: Response) => {
@@ -181,7 +199,16 @@ export function buildRouter(deps: AppDeps): Router {
   router.get("/runs/:id", async (req, res) => {
     const row = await store.runs.get(req.params.id);
     if (!row) return notFound(res, "Run");
-    res.json({ run: row.run, issues: row.issues, metrics: computeRunMetrics(row.run, row.issues) });
+    const testResults = await store.testResults.listByRun(row.run.id);
+    const gates = evaluateQualityGates({
+      issues: row.issues,
+      testResults,
+      securityScanPassed: row.issues.every(
+        (i) => i.category !== "security" || i.state === "verified_fixed" || i.state === "false_positive",
+      ),
+      policy: await store.settings.get("policy", DEFAULT_POLICY),
+    });
+    res.json({ run: row.run, issues: row.issues, metrics: computeRunMetrics(row.run, row.issues), gates });
   });
 
   router.post("/runs/:id/cancel", async (req, res) => {

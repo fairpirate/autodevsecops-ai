@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { buildApp } from "./app";
 import { RunEventBus } from "./events";
 import { TokenVault } from "@ads/gitlab-integration";
-import { Orchestrator, type ExecutorHost } from "@ads/orchestrator";
+import { Orchestrator, createNebiusRepairProvider, type ExecutorHost } from "@ads/orchestrator";
 import { createMemoryStore } from "./store/memory";
 import type { Store } from "./store/types";
 import { createGitLabHost } from "./hosts";
@@ -42,6 +42,9 @@ async function main(): Promise<void> {
 
   const orchestrator = new Orchestrator({
     host,
+    aiRepair: config.AI_PROVIDER === "nebius" ? createNebiusRepairProvider({
+      apiKey: config.NEBIUS_API_KEY, baseUrl: config.NEBIUS_BASE_URL, model: config.NEBIUS_MODEL,
+    }) : undefined,
     events: {
       emit: (runId, type, payload) => {
         // Persist test results alongside events; fan out to SSE subscribers.
@@ -78,6 +81,7 @@ async function main(): Promise<void> {
 
   const server = app.listen(config.CONTROL_API_PORT, () => {
     console.log(`[server] control-api listening on http://localhost:${config.CONTROL_API_PORT}`);
+    console.log(`[server] AI provider: ${config.AI_PROVIDER}`);
     console.log(`[server] queue driver: ${config.QUEUE_DRIVER}, duo flows: ${config.duoFlowsEnabled ? "enabled" : "disabled (deterministic analyzers only)"}`);
   });
 

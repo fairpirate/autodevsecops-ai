@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { ADMIN_KEY, ENG_KEY, SHA, VIEWER_KEY, createHarness, type Harness } from "../fixtures/api-harness";
 
@@ -26,18 +26,35 @@ describe("control-api: auth, projects, runs, events", () => {
     expect(bad.body.error.code).toBe("unauthorized");
   });
 
+  it("identifies invalid dashboard credentials before attempting GitLab access", async () => {
+    const gitlabFetch = vi.spyOn(globalThis, "fetch");
+    try {
+      const res = await request(h.base)
+        .post("/api/v1/projects/connect")
+        .set("Authorization", "Bearer wrong-dashboard-key")
+        .send({ gitlabBaseUrl: "https://gitlab.example", token: "fixture-gitlab-token", gitlabProjectId: 123 });
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("unauthorized");
+      expect(res.body.error.message).toContain("Invalid control API key");
+      expect(res.body.error.message).toContain("API_KEYS");
+      expect(gitlabFetch).not.toHaveBeenCalled();
+    } finally {
+      gitlabFetch.mockRestore();
+    }
+  });
+
   it("connects a GitLab project and encrypts the token at rest", async () => {
     const res = await request(h.base)
       .post("/api/v1/projects/connect")
       .set("Authorization", `Bearer ${ADMIN_KEY}`)
-      .send({ gitlabBaseUrl: "https://gitlab.example", token: "glpat-testtoken123456", gitlabProjectId: 123 });
+      .send({ gitlabBaseUrl: "https://gitlab.example", token: "fixture-gitlab-token", gitlabProjectId: 123 });
     expect(res.status).toBe(201);
     expect(res.body.project.pathWithNamespace).toBe("group/demo");
     expect(res.body.project.tokenEncrypted).toBeUndefined();
 
     const row = (await h.store.projects.getByGitlabId(123))!;
-    expect(row.tokenEncrypted).not.toContain("glpat-testtoken123456");
-    expect(h.vault.decrypt(row.tokenEncrypted)).toBe("glpat-testtoken123456");
+    expect(row.tokenEncrypted).not.toContain("fixture-gitlab-token");
+    expect(h.vault.decrypt(row.tokenEncrypted)).toBe("fixture-gitlab-token");
   });
 
   it("validates connect payloads", async () => {
@@ -47,6 +64,43 @@ describe("control-api: auth, projects, runs, events", () => {
       .send({ token: "short" });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("validation_error");
+  });
+
+  it("paginates commits in GitLab and validates the query", async () => {
+    const projectId = await h.connectProject();
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(
+      JSON.stringify([{ id: SHA, short_id: SHA.slice(0, 8), title: "Selected revision" }]),
+      { headers: { "content-type": "application/json", "x-next-page": "3" } },
+    ));
+    try {
+      const res = await request(h.base).get(`/api/v1/projects/${projectId}/commits?ref=feature%2Ftest&page=2&perPage=1`)
+        .set("Authorization", `Bearer ${ENG_KEY}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ page: 2, perPage: 1, hasNext: true, items: [{ id: SHA }] });
+      expect(spy).toHaveBeenCalledTimes(1);
+      const url = new URL(String(spy.mock.calls[0][0]));
+      expect(url.pathname).toBe("/api/v4/projects/123/repository/commits");
+      expect(Object.fromEntries(url.searchParams)).toEqual({ ref_name: "feature/test", page: "2", per_page: "1" });
+      spy.mockClear();
+      for (const query of ["page=0", "perPage=101", "ref="]) {
+        const invalid = await request(h.base).get(`/api/v1/projects/${projectId}/commits?${query}`)
+          .set("Authorization", `Bearer ${ENG_KEY}`);
+        expect(invalid.status).toBe(400);
+      }
+      expect(spy).not.toHaveBeenCalled();
+      expect((await request(h.base).get(`/api/v1/projects/${projectId}/commits`)).status).toBe(401);
+      expect((await request(h.base).get("/api/v1/projects/missing/commits")
+        .set("Authorization", `Bearer ${ENG_KEY}`)).status).toBe(404);
+      spy.mockResolvedValue(new Response("[]", { headers: { "x-next-page": "" } }));
+      const empty = await request(h.base).get(`/api/v1/projects/${projectId}/commits`)
+        .set("Authorization", `Bearer ${ENG_KEY}`);
+      expect(empty.body).toMatchObject({ items: [], hasNext: false });
+      spy.mockResolvedValue(new Response("private upstream error", { status: 403 }));
+      const failed = await request(h.base).get(`/api/v1/projects/${projectId}/commits`)
+        .set("Authorization", `Bearer ${ENG_KEY}`);
+      expect(failed.status).toBe(502);
+      expect(JSON.stringify(failed.body)).not.toContain("private upstream error");
+    } finally { spy.mockRestore(); }
   });
 
   it("runs the closed loop from POST /runs to READY_FOR_BUILD with evidence", async () => {
@@ -86,7 +140,7 @@ describe("control-api: auth, projects, runs, events", () => {
 
     const runs = await request(h.base).get("/api/v1/runs").set("Authorization", `Bearer ${ENG_KEY}`);
     expect(runs.body.total).toBeGreaterThanOrEqual(1);
-    expect(runs.body.items[0].commitSha).toBe(SHA);
+    expect(runs.body.items[0].commitSha).toBe("patch1");
   });
   it("cancels a run and refuses double-cancel", async () => {
     const projectId = await h.connectProject();

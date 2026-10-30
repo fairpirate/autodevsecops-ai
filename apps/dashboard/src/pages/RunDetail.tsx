@@ -26,13 +26,17 @@ export function RunDetail() {
 
   if (detail.isPending) return <Loading />;
   if (detail.isError) return <ErrorBox message={(detail.error as Error).message} onRetry={() => detail.refetch()} />;
-  const run = detail.data;
+  const data = detail.data;
+  const run = data.run;
+  const issues = data.issues ?? [];
+  const gates = data.gates ?? [];
+  const metrics = data.metrics ?? {};
   const activeIdx = STEPS.indexOf(run.state as (typeof STEPS)[number]);
 
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="row">
-        <h2 style={{ margin: 0 }}>Run {run.ref}@{run.commitSha.slice(0, 8)}</h2>
+        <h2 style={{ margin: 0 }}>Run {run.ref}@{run.commitSha?.slice(0, 8) ?? "—"}</h2>
         <Pill value={run.state} />
         <span className="muted">iteration {run.iteration}{run.stopReason ? ` · ${run.stopReason}` : ""}</span>
         <span style={{ flex: 1 }} />
@@ -54,17 +58,17 @@ export function RunDetail() {
 
       <div className="grid cols-2">
         <div className="card">
-          <h3>Findings ({run.issues.length})</h3>
-          {run.issues.length === 0 ? <Empty message="No findings recorded." /> : (
+          <h3>Findings ({issues.length})</h3>
+          {issues.length === 0 ? <Empty message="No findings recorded." /> : (
             <table><thead><tr><th>Issue</th><th>Severity</th><th>State</th></tr></thead>
-            <tbody>{run.issues.map((i) => (
+            <tbody>{issues.map((i) => (
               <tr key={i.id}><td><Link to={`/issues/${i.id}`}>{i.title}</Link></td><td><Pill value={i.severity} /></td><td><Pill value={i.state} /></td></tr>
             ))}</tbody></table>
           )}
           <h3>Quality gates</h3>
-          <ul>{run.gates.map((g) => <li key={g.gate}>{g.gate}: <Pill value={g.passed ? "pass" : "failed"} /> — {g.detail}</li>)}</ul>
+          <ul>{gates.map((g) => <li key={g.gate}>{g.gate}: <Pill value={g.passed ? "pass" : "failed"} /> — {g.detail}</li>)}</ul>
           <h3>Metrics</h3>
-          <pre className="logs">{JSON.stringify(run.metrics, null, 2)}</pre>
+          <pre className="logs">{JSON.stringify(metrics, null, 2)}</pre>
         </div>
         <div className="card">
           <h3>Test results ({tests.data?.items.length ?? 0})</h3>

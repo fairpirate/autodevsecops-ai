@@ -75,6 +75,8 @@ export function createGitLabHost(
   const workspaceRoot =
     opts.workspaceRoot ?? path.resolve(process.env.EXEC_WORK_DIR ?? "./.exec-workspace");
 
+  const revisions = new Map<string, string>();
+
   async function service(ctx: HostProjectContext) {
     return createGitLabService({ baseUrl: ctx.gitlabBaseUrl, token: ctx.token });
   }
@@ -88,7 +90,9 @@ export function createGitLabHost(
     try {
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
-      const url = `${ctx.gitlabBaseUrl.replace(/\/$/, "")}/${ctx.gitlabProjectId}.git`;
+      const { api } = await service(ctx);
+      const project = await api.findProject(ctx.gitlabProjectId);
+      const url = `${ctx.gitlabBaseUrl.replace(/\/$/, "")}/${project.path_with_namespace}.git`;
       const code = await runGit(["clone", "--depth", "50", "--branch", ref, "--", url, dir], ctx.token);
       return code === 0 ? dir : undefined;
     } catch {
@@ -96,12 +100,24 @@ export function createGitLabHost(
     }
   }
 
+  async function syncTestWorkspace(runId: string, sha: string): Promise<void> {
+    const dir = path.join(workspaceRoot, runId);
+    if (!existsSync(dir)) return; // Missing workspace is a failed test result below.
+    const ctx = await opts.resolveContext(runId);
+    const fetched = await runGit(["-C", dir, "fetch", "origin", sha], ctx.token);
+    const checked = fetched === 0 ? await runGit(["-C", dir, "checkout", "--detach", sha], ctx.token) : 1;
+    if (checked !== 0) throw new Error("Could not check out repaired commit for test execution");
+  }
+
   return {
     async checkout(runId, projectRef, commitSha): Promise<CheckoutResult> {
       try {
         const ctx = await opts.resolveContext(runId);
         const { api } = await service(ctx);
-        const ref = commitSha || projectRef;
+        const revision = await api.getCommit(ctx.gitlabProjectId, commitSha || projectRef);
+        commitSha = revision.id;
+        const ref = commitSha;
+        revisions.set(runId, commitSha);
         const tree = await listTree(api, ctx.gitlabProjectId, ref);
         const files: FileMap = {};
         const blobs = tree
@@ -126,7 +142,10 @@ export function createGitLabHost(
             detail: "API checkout OK; local clone failed — test execution will report the failure",
           };
         }
-        return { ok: Object.keys(files).length > 0, files, commitSha };
+        const pinned = await runGit(["-C", dir, "fetch", "origin", commitSha], ctx.token) === 0
+          && await runGit(["-C", dir, "checkout", "--detach", commitSha], ctx.token) === 0;
+        return { ok: pinned && Object.keys(files).length > 0, files, commitSha,
+          detail: pinned ? undefined : "Could not pin test workspace to requested commit" };
       } catch (err) {
         return { ok: false, files: {}, commitSha, detail: redactSecrets(msg(err)) };
       }
@@ -134,11 +153,14 @@ export function createGitLabHost(
 
     async applyPatch(runId, branch, files, message) {
       try {
+        if (!branch.startsWith("autofix/")) return { ok: false, detail: "Protected branch rejected" };
         const ctx = await opts.resolveContext(runId);
         const { api } = await service(ctx);
+        const base = revisions.get(runId);
+        if (!base) return { ok: false, detail: "No checked-out revision" };
         try {
           // Isolated repair branch (never a protected branch).
-          await api.createBranch(ctx.gitlabProjectId, branch, "main");
+          await api.createBranch(ctx.gitlabProjectId, branch, base);
         } catch (err) {
           if (!/already exists|400|409/i.test(msg(err))) {
             return { ok: false, detail: redactSecrets(msg(err)) };
@@ -150,6 +172,7 @@ export function createGitLabHost(
           content: f.content,
         }));
         const commit = await api.commitFiles(ctx.gitlabProjectId, branch, message, actions);
+        revisions.set(runId, commit.id);
         return { ok: true, commitSha: commit.id };
       } catch (err) {
         return { ok: false, detail: redactSecrets(msg(err)) };
@@ -157,15 +180,44 @@ export function createGitLabHost(
     },
 
     async runTargetedTests(runId, a) {
+      try {
+        await syncTestWorkspace(runId, a.commitSha);
+      } catch (err) {
+        return [{
+          commitSha: a.commitSha,
+          environment: "local",
+          suite: "workspace:pin",
+          platform: "server",
+          passed: false,
+          durationMs: 0,
+          failureSummary: redactSecrets(msg(err)),
+          timestamp: new Date().toISOString(),
+        }];
+      }
       return runWorkspaceSuites(workspaceRoot, runId, a.commitSha, "targeted");
     },
     async runFullRegression(runId, a) {
+      try {
+        await syncTestWorkspace(runId, a.commitSha);
+      } catch (err) {
+        return [{
+          commitSha: a.commitSha,
+          environment: "local",
+          suite: "workspace:pin",
+          platform: "server",
+          passed: false,
+          durationMs: 0,
+          failureSummary: redactSecrets(msg(err)),
+          timestamp: new Date().toISOString(),
+        }];
+      }
       return runWorkspaceSuites(workspaceRoot, runId, a.commitSha, "full");
     },
     async runSecurityScan(): Promise<SecurityScanResult> {
       return { passed: true, findings: [], tool: "orchestrator-deterministic-rescan" };
     },
     dispose(runId) {
+      revisions.delete(runId);
       rmSync(path.join(workspaceRoot, runId), { recursive: true, force: true });
     },
   };
@@ -195,10 +247,10 @@ function detectSuites(dir: string, mode: "targeted" | "full"): SuiteSpec[] {
     specs.push({
       suite: "server:unit",
       platform: "server",
-      command: "npx",
+      command: has("vitest.config.ts") || has("vitest.config.js") ? "npx" : "npm",
       args: has("vitest.config.ts") || has("vitest.config.js")
         ? ["vitest", "run", "--reporter=json"]
-        : ["npm", "test", "--silent"],
+        : ["test", "--", "--run"],
     });
   }
   if (mode === "targeted") return specs.length > 0 ? specs : [fallback(dir)];

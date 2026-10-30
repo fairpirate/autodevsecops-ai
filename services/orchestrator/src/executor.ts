@@ -8,11 +8,12 @@ import type {
 } from "@ads/shared-types";
 import { DEFAULT_BUDGET, isTerminal } from "@ads/shared-types";
 import { IssueLedger } from "@ads/issue-ledger";
-import { evaluateQualityGates, gatesPassed } from "@ads/policy-engine";
+import { evaluateQualityGates, gatesPassed, type PolicySet } from "@ads/policy-engine";
 import { advance, measureProgress, type EngineContext, type StepSignals } from "@ads/workflow-engine";
 import { analyzeMissingTests, runCodeReview, runSecurityReview } from "./analyzers";
 import type { ExecutorHost, FileMap, RunEventSink } from "./ports";
 import { attemptDeterministicRepair, buildRepairGoal, repairBranchName } from "./repair";
+import { NebiusRepairError, type AIRepairProvider } from "./nebius";
 import { verifyRepair } from "./verification";
 
 
@@ -45,6 +46,10 @@ export interface ExecutorDeps {
   /** Optional GitLab Duo flow dispatch (Agent Platform). */
   dispatchFlow?: (goal: string, clientReference: string) => Promise<{ workflowId: number }>;
   duoEnabled?: boolean;
+  /** Explicit provider; failures block the issue rather than impersonating successful AI. */
+  aiRepair?: AIRepairProvider;
+  /** Host-configured policy; never supplied by model output. */
+  policy?: Partial<PolicySet>;
 }
 
 export function engineContextOf(session: RunSession, nowMs = Date.now()): EngineContext {
@@ -131,7 +136,11 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
       let planned = 0;
       for (const issue of targets) {
         const attempt = attemptDeterministicRepair(issue, session.files, run.id, run.iteration);
-        if (attempt) {
+        if (deps.aiRepair) {
+          ledger.transition(issue.id, "repair_planned", "repair", "Planned NVIDIA Nemotron repair via Nebius Token Factory");
+          session.aiTasks.push({ issueId: issue.id, goal: "nebius", status: "pending" });
+          planned++;
+        } else if (attempt) {
           ledger.transition(issue.id, "repair_planned", "repair", `Planned deterministic fix (${attempt.result.branch})`);
           session.repairs.push({ issue, repair: attempt.result, applied: false });
           planned++;
@@ -157,6 +166,35 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
       let tokens = 0;
       const budget = run.budget;
       for (const task of session.aiTasks) {
+        if (task.goal === "nebius" && task.status === "pending" && deps.aiRepair) {
+          const issue = ledger.get(task.issueId);
+          try {
+            const response = await deps.aiRepair.repair({
+              issue, files: session.files, runId: run.id, iteration: run.iteration,
+              maxPatchSizeLines: budget.maxPatchSizeLines,
+              remainingTokens: budget.maxTokenBudget - run.tokensUsed - tokens,
+            });
+            tokens += response.tokensUsed;
+            const attempt = response.attempt;
+            const commit = await deps.host.applyPatch(run.id, attempt.result.branch, attempt.updates,
+              `fix(${issue.category}): ${issue.title} [Nemotron]`);
+            if (!commit.ok || !commit.commitSha) throw new Error("Model patch could not be committed");
+            for (const update of attempt.updates) session.files[update.path] = update.content;
+            run.commitSha = commit.commitSha;
+            attempt.result.commitSha = commit.commitSha;
+            session.repairs.push({ issue, repair: attempt.result, applied: true });
+            ledger.recordRepairAttempt(issue.id);
+            task.status = "dispatched";
+            emit("repair_generated", { issueId: issue.id, branch: attempt.result.branch,
+              commitSha: commit.commitSha, patchSizeLines: attempt.result.patchSizeLines,
+              provider: "nebius", model: response.model, tokensUsed: response.tokensUsed });
+          } catch (err) {
+            task.status = "unavailable";
+            ledger.transition(issue.id, "blocked", "repair", "Nebius repair failed or patch rejected; human review required");
+            emit("error", { issueId: issue.id, message: err instanceof NebiusRepairError ? err.message : "Nebius repair unavailable or rejected; no fix claimed" });
+          }
+          continue;
+        }
         if (task.status !== "pending" || !deps.dispatchFlow) continue;
         try {
           await deps.dispatchFlow(task.goal, `run:${run.id}:iter:${run.iteration}:${task.issueId}`);
@@ -180,7 +218,6 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
           pr.reason = "Deterministic transform no longer applies";
           continue;
         }
-        for (const u of attempt.updates) session.files[u.path] = u.content;
         const commit = await deps.host.applyPatch(
           run.id,
           pr.repair.branch,
@@ -190,6 +227,8 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
         pr.applied = commit.ok;
         pr.repair.commitSha = commit.commitSha;
         if (commit.ok) {
+          for (const u of attempt.updates) session.files[u.path] = u.content;
+          if (commit.commitSha) run.commitSha = commit.commitSha;
           ledger.recordRepairAttempt(pr.issue.id);
           ledger.transition(pr.issue.id, "repair_attempted", "repair", `Patch applied on ${pr.repair.branch}`);
           emit("repair_generated", {
@@ -203,7 +242,7 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
           emit("error", { message: pr.reason });
         }
       }
-      if (tokens > 0) emit("log", { message: `AI execution budget consumed: +${tokens} tokens (est.)` });
+      if (tokens > 0) emit("log", { message: `AI execution budget consumed: +${tokens} tokens (provider usage; Duo dispatches estimated)` });
       signals = { ok: true, tokensUsed: tokens };
       break;
     }
@@ -276,6 +315,7 @@ export async function executeStep(session: RunSession, deps: ExecutorDeps): Prom
       const issues = ledger.list();
       const gates = evaluateQualityGates({
         issues,
+        policy: deps.policy,
         testResults: [...session.targetedTests, ...session.regressionTests],
         securityScanPassed: session.securityScanPassed,
       });
@@ -331,6 +371,8 @@ function applyResult(
         verifiedFixes: metrics.verifiedFixes,
         remaining: metrics.remainingFindings,
         verifiedFixRate: metrics.verifiedFixRate,
+        verifiedFixRateDenominator: metrics.verifiedFixRateDenominator,
+        verifiedFixRateExclusions: metrics.verifiedFixRateExclusions,
         iterations: run.iteration,
       },
     });

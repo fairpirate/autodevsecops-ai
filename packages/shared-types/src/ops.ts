@@ -110,7 +110,10 @@ export type StopReason =
   | "required_test_failed"
   | "security_scan_failed"
   | "cancelled_by_user"
-  | "max_iterations";
+  | "max_iterations"
+  | "execution_error"
+  | "workflow_stalled"
+  | "max_steps_exceeded";
 
 export interface RunRecord {
   id: string;

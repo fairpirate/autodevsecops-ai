@@ -125,8 +125,71 @@ export class Orchestrator {
     const session = this.sessions.get(runId);
     if (!session) throw new Error(`Unknown run ${runId}`);
     let steps = 0;
+    let lastState = session.run.state;
+    let stalled = 0;
     while (!isTerminalState(session.run.state) && steps++ < maxSteps) {
-      await this.stepOnce(runId);
+      try {
+        await this.stepOnce(runId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        session.run.state = "FAILED";
+        session.run.stopReason = "execution_error";
+        session.run.finishedAt = session.run.finishedAt ?? new Date().toISOString();
+        session.run.updatedAt = new Date().toISOString();
+        try {
+          this.opts.events.emit(runId, "error", { message });
+          this.opts.events.emit(runId, "completed", { state: session.run.state, stopReason: session.run.stopReason });
+        } catch {
+          /* best effort */
+        }
+        try {
+          await this.persist(session);
+        } catch {
+          /* best effort */
+        }
+        return session.run;
+      }
+      if (session.run.state === lastState) {
+        stalled++;
+        if (stalled >= 3) {
+          session.run.state = "FAILED";
+          session.run.stopReason = "no_progress";
+          session.run.finishedAt = session.run.finishedAt ?? new Date().toISOString();
+          session.run.updatedAt = new Date().toISOString();
+          try {
+            this.opts.events.emit(runId, "error", { message: "Workflow stalled without state change" });
+            this.opts.events.emit(runId, "completed", { state: session.run.state, stopReason: session.run.stopReason });
+          } catch {
+            /* best effort */
+          }
+          try {
+            await this.persist(session);
+          } catch {
+            /* best effort */
+          }
+          return session.run;
+        }
+      } else {
+        stalled = 0;
+        lastState = session.run.state;
+      }
+    }
+    if (!isTerminalState(session.run.state)) {
+      session.run.state = "FAILED";
+      session.run.stopReason = session.run.stopReason ?? "max_steps_exceeded";
+      session.run.finishedAt = session.run.finishedAt ?? new Date().toISOString();
+      session.run.updatedAt = new Date().toISOString();
+      try {
+        this.opts.events.emit(runId, "error", { message: "Workflow exceeded maximum step bound" });
+        this.opts.events.emit(runId, "completed", { state: session.run.state, stopReason: session.run.stopReason });
+      } catch {
+        /* best effort */
+      }
+      try {
+        await this.persist(session);
+      } catch {
+        /* best effort */
+      }
     }
     return session.run;
   }

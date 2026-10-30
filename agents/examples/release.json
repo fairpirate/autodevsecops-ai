@@ -1,0 +1,56 @@
+{
+  "release": {
+    "id": "example-release",
+    "artifactId": "example-artifact",
+    "sourceCommitSha": "repaired-revision",
+    "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "testEvidence": [],
+    "securityScanStatus": "not_run",
+    "qualityGateDecision": "not_run",
+    "approvals": [],
+    "createdAt": "2026-10-30T00:00:00.000Z"
+  },
+  "artifact": {
+    "id": "example-artifact",
+    "runId": "example-run",
+    "sourceCommitSha": "repaired-revision",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "server_package",
+    "metadata": {
+      "example": "Input format example only; no built artifact exists."
+    },
+    "createdAt": "2026-10-30T00:00:00.000Z"
+  },
+  "environment": "PRODUCTION",
+  "issues": [
+    {
+      "id": "example-issue",
+      "runId": "example-run",
+      "dedupKey": "example-weak-hash",
+      "title": "AVSS05: Weak hash algorithm (md5/sha1)",
+      "description": "A security-sensitive digest uses the collision-prone MD5 algorithm.",
+      "category": "security",
+      "severity": "high",
+      "confidence": 0.95,
+      "filePath": "src/digest.js",
+      "lineStart": 2,
+      "evidence": [
+        {
+          "kind": "analyzer_rule",
+          "description": "MD5 matched in the digest implementation",
+          "reference": "AVSS05 @ src/digest.js:2"
+        }
+      ],
+      "impact": "Digest collisions undermine integrity checks.",
+      "remediation": "Use SHA-256 while preserving the digest interface.",
+      "verificationMethod": "Rescan the hash and execute the digest regression test.",
+      "blocksRelease": true,
+      "state": "triaged",
+      "discoverySource": "deterministic:security-review",
+      "affectedRevision": "source-revision",
+      "history": [],
+      "repairAttempts": 0
+    }
+  ],
+  "testResults": []
+}

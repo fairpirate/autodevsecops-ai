@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-30T05:36:36.939Z",
+  "command": "npm run demo:nebius",
+  "scope": "Isolated local fixture; real hosted inference and real Node test execution. No GitLab or deployment validation.",
+  "provider": "nebius",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "tokensUsed": 672,
+  "baselinePassed": false,
+  "patchSizeLines": 2,
+  "targetedTests": { "suite": "server:unit", "passed": true, "durationMs": 84 },
+  "regressionTests": { "suite": "server:unit", "passed": true, "durationMs": 46 },
+  "verification": { "verdict": "verified_fixed", "confidence": 0.99 },
+  "finalState": "READY_FOR_BUILD",
+  "verifiedFixes": 1,
+  "verifiedFixRateDenominator": 1,
+  "verifiedFixRateExclusions": 0,
+  "limitations": "One weak-hash fixture is evidence of this path only; it does not establish general repair quality. Usage and latency vary between runs."
+}
