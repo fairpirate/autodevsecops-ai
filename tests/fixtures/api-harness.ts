@@ -162,7 +162,7 @@ export function createHarness(): Harness {
       const res = await request(base)
         .post("/api/v1/projects/connect")
         .set("Authorization", `Bearer ${ADMIN_KEY}`)
-        .send({ gitlabBaseUrl: "https://gitlab.example", token: "glpat-testtoken123456", gitlabProjectId: 123 });
+        .send({ gitlabBaseUrl: "https://gitlab.example", token: "fixture-gitlab-token", gitlabProjectId: 123 });
       if (res.status !== 201) throw new Error(`connect failed: ${res.status} ${JSON.stringify(res.body)}`);
       return res.body.project.id as string;
     },

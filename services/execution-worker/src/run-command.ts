@@ -47,6 +47,11 @@ export function runCommandAsTest(opts: CommandTestOptions): Promise<TestResult> 
           NODE_ENV: "test",
           // Never pass GitLab/AI credentials into untrusted test processes.
           GITLAB_INTEGRATION_TOKEN: "",
+          NEBIUS_API_KEY: "",
+          CREDENTIAL_KEY_BASE64: "",
+          API_KEYS: "",
+          DATABASE_URL: "",
+          REDIS_URL: "",
           DUO_FLOWS_ENABLED: process.env.DUO_FLOWS_ENABLED ?? "false",
         },
         windowsHide: true,

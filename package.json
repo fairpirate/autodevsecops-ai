@@ -14,14 +14,15 @@
     "typecheck": "tsc -b tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:api": "tsx watch apps/control-api/src/server.ts",
+    "dev:api": "node --env-file=.env --import tsx --watch apps/control-api/src/server.ts",
     "dev:orchestrator": "tsx watch services/orchestrator/src/main.ts",
     "dev:worker": "tsx watch services/execution-worker/src/main.ts",
     "dev:dashboard": "npm run dev -w @ads/dashboard",
     "db:generate": "prisma generate --schema apps/control-api/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema apps/control-api/prisma/schema.prisma",
     "db:deploy": "prisma migrate deploy --schema apps/control-api/prisma/schema.prisma",
-    "db:seed": "tsx apps/control-api/prisma/seed.ts"
+    "db:seed": "tsx apps/control-api/prisma/seed.ts",
+    "demo:nebius": "node --env-file=.env --import tsx scripts/nebius-demo.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

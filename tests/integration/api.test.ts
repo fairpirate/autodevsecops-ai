@@ -30,14 +30,14 @@ describe("control-api: auth, projects, runs, events", () => {
     const res = await request(h.base)
       .post("/api/v1/projects/connect")
       .set("Authorization", `Bearer ${ADMIN_KEY}`)
-      .send({ gitlabBaseUrl: "https://gitlab.example", token: "glpat-testtoken123456", gitlabProjectId: 123 });
+      .send({ gitlabBaseUrl: "https://gitlab.example", token: "fixture-gitlab-token", gitlabProjectId: 123 });
     expect(res.status).toBe(201);
     expect(res.body.project.pathWithNamespace).toBe("group/demo");
     expect(res.body.project.tokenEncrypted).toBeUndefined();
 
     const row = (await h.store.projects.getByGitlabId(123))!;
-    expect(row.tokenEncrypted).not.toContain("glpat-testtoken123456");
-    expect(h.vault.decrypt(row.tokenEncrypted)).toBe("glpat-testtoken123456");
+    expect(row.tokenEncrypted).not.toContain("fixture-gitlab-token");
+    expect(h.vault.decrypt(row.tokenEncrypted)).toBe("fixture-gitlab-token");
   });
 
   it("validates connect payloads", async () => {
@@ -86,7 +86,7 @@ describe("control-api: auth, projects, runs, events", () => {
 
     const runs = await request(h.base).get("/api/v1/runs").set("Authorization", `Bearer ${ENG_KEY}`);
     expect(runs.body.total).toBeGreaterThanOrEqual(1);
-    expect(runs.body.items[0].commitSha).toBe(SHA);
+    expect(runs.body.items[0].commitSha).toBe("patch1");
   });
   it("cancels a run and refuses double-cancel", async () => {
     const projectId = await h.connectProject();
