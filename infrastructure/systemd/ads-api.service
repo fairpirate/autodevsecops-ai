@@ -1,0 +1,25 @@
+[Unit]
+Description=AutoDevSecOps AI control API
+Documentation=https://github.com/fairpirate/autodevsecops-ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=autodevsecops
+Group=autodevsecops
+WorkingDirectory=/opt/autodevsecops-ai
+# Secrets come from the private .env file (chmod 600), not from this unit file.
+EnvironmentFile=/opt/autodevsecops-ai/.env
+ExecStart=/usr/bin/node --env-file=/opt/autodevsecops-ai/.env apps/control-api/dist/server.js
+Restart=always
+RestartSec=5
+
+# Production hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/opt/autodevsecops-ai/.exec-workspace
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

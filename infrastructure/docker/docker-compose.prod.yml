@@ -1,0 +1,132 @@
+# AutoDevSecOps AI — production Compose overlay for a VPS.
+#
+# Base: infrastructure/docker/docker-compose.yml (local full-stack simulation).
+# This overlay hardens it for production:
+#   * Postgres and Redis bind to 127.0.0.1 only — not publicly reachable.
+#   * The control API binds to 127.0.0.1:4000; host Nginx terminates TLS.
+#   * The dashboard container serves the built frontend on 127.0.0.1:8080.
+#   * restart: unless-stopped on every service.
+#   * JSON log rotation + memory limits.
+#   * A health check on /api/v1/health.
+#
+# Usage (from the repo root on the VPS, as a non-root user in the docker group):
+#
+#   cp infrastructure/env/production.env.example .env
+#   # edit .env: secrets, PUBLIC_BASE_URL=https://your-domain, STORE=prisma
+#   chmod 600 .env
+#   docker compose -f infrastructure/docker/docker-compose.yml \
+#                  -f infrastructure/docker/docker-compose.prod.yml \
+#                  --env-file .env up --build -d
+#
+# The worker services (orchestrator + execution-worker) live in the
+# "workers" profile and are only needed when running the agent flows on this host:
+#   docker compose ... --profile workers up -d
+#
+# Nebius note: AI_PROVIDER=nebius requires QUEUE_DRIVER=memory (enforced by
+# apps/control-api/src/config.ts); the embedded orchestrator handles the flows,
+# so no separate worker services are required in that mode.
+
+name: autodevsecops-ai
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    extends:
+      file: docker-compose.yml
+      service: redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  control-api:
+    extends:
+      file: docker-compose.yml
+      service: control-api
+    ports:
+      - "127.0.0.1:4000:4000"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      STORE: prisma
+      QUEUE_DRIVER: ${QUEUE_DRIVER:-memory}
+      EVENT_DRIVER: memory
+      EXEC_WORK_DIR: /app/.exec-workspace
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  dashboard:
+    extends:
+      file: docker-compose.yml
+      service: dashboard
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- workers (optional; enable with --profile workers) ---
+  #
+  # Review/repair/verification loop workers. With AI_PROVIDER=nebius the
+  # embedded orchestrator runs with QUEUE_DRIVER=memory, so these are not
+  # required in that mode.
+  #
+  # orchestrator:
+  #   extends:
+  #     file: docker-compose.yml
+  #     service: orchestrator
+  #   profiles: ["workers"]
+  #   restart: unless-stopped
+  #
+  # execution-worker:
+  #   extends:
+  #     file: docker-compose.yml
+  #     service: execution-worker
+  #   profiles: ["workers"]
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro   # EXEC_USE_DOCKER=true only
+
+volumes:
+  pgdata:

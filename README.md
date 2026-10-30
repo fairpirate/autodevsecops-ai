@@ -181,6 +181,40 @@ GET  /api/v1/metrics  GET|PUT /api/v1/policies  GET /api/v1/audit
 POST /api/v1/webhooks/gitlab  POST /api/v1/webhooks/flow-callback
 ```
 
+## Production VPS deployment
+
+AutoDevSecOps AI runs on a VPS with Docker Compose (API, Postgres, Redis,
+dashboard) plus host Nginx for TLS termination (Certbot/Let's Encrypt).
+Production-specific files:
+
+- `infrastructure/docker/docker-compose.prod.yml` — production Compose overlay
+  (DB/Redis on 127.0.0.1 only, restart policies, log rotation, API healthcheck).
+- `infrastructure/env/production.env.example` — production `.env` template.
+- `infrastructure/systemd/ads-api.service` — optional systemd unit for the API.
+- `scripts/vps-deploy.sh` — end-to-end deploy script.
+- `infrastructure/nginx/` — Nginx bootstrap + HTTPS site configs.
+- `docs/production-vps.md` — step-by-step production setup guide (DNS, firewall,
+  Nginx/Certbot, GitLab webhooks, backups, updates, rollback).
+
+Run on the VPS:
+
+```bash
+cp infrastructure/env/production.env.example .env
+# edit .env: secrets, PUBLIC_BASE_URL=https://your-domain, STORE=prisma
+chmod 600 .env
+npm ci --no-audit --no-fund
+npm run typecheck
+npm test
+npx tsx scripts/security-scan.ts
+VITE_API_BASE_URL= npm run build --workspace @ads/dashboard
+docker compose -f infrastructure/docker/docker-compose.yml \
+               -f infrastructure/docker/docker-compose.prod.yml \
+               --env-file .env up --build -d
+curl http://127.0.0.1:4000/api/v1/health   # expect {"status":"ok"}
+```
+
+See `docs/production-vps.md` for the full procedure.
+
 ## Metrics that mean something
 
 `verifiedFixRate = verified_fixed / (initial − accepted_risk − false_positive)` —
