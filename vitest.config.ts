@@ -20,7 +20,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts", "packages/**/*.test.ts", "services/**/*.test.ts", "apps/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "tests/e2e/**"],
+    exclude: ["**/node_modules/**", "**/dist/**"],
     testTimeout: 30000,
     hookTimeout: 30000,
   },

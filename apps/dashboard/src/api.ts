@@ -1,5 +1,5 @@
 /** Typed REST client for the control API (same origin in dev via Vite proxy). */
-const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+const base = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(/\/$/, "");
 
 function apiKey(): string {
   return (import.meta.env.VITE_API_KEY as string | undefined) ?? localStorage.getItem("ads_api_key") ?? "";
@@ -18,6 +18,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json") && !contentType.includes("+json")) {
+    throw new Error(
+      contentType.includes("text/html")
+        ? "The dashboard received HTML instead of API data. Check the API address and restart the dashboard."
+        : `The control API did not return JSON (HTTP ${res.status}). Check that npm run dev:api is running.`,
+    );
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`);

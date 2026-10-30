@@ -37,10 +37,10 @@ describe("e2e: dashboard ↔ control-api contract", () => {
 
   it("dashboard client calls every required endpoint (no hardcoded results)", () => {
     for (const fn of [
-      "projects()", "connectProject", "createRun", "runDetail",
+      "projects:", "connectProject", "createRun", "runDetail",
       "runIssues", "runIterations", "runTests", "cancelRun", "retryRun",
-      "environments()", "deployments()", "approveDeployment",
-      "rollbackDeployment", "metrics()", "subscribeRunEvents",
+      "environments:", "deployments:", "approveDeployment",
+      "rollbackDeployment", "metrics:", "subscribeRunEvents",
     ]) {
       expect(apiClient).toContain(fn);
     }
