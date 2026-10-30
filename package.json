@@ -22,7 +22,12 @@
     "db:migrate": "prisma migrate dev --schema apps/control-api/prisma/schema.prisma",
     "db:deploy": "prisma migrate deploy --schema apps/control-api/prisma/schema.prisma",
     "db:seed": "tsx apps/control-api/prisma/seed.ts",
-    "demo:nebius": "node --env-file=.env --import tsx scripts/nebius-demo.ts"
+    "demo:nebius": "node --env-file=.env --import tsx scripts/nebius-demo.ts",
+    "agent:code-review": "node --import tsx agents/code-review/run.ts",
+    "agent:security-review": "node --import tsx agents/security-review/run.ts",
+    "agent:repair": "node --import tsx agents/repair/run.ts",
+    "agent:verification": "node --import tsx agents/verification/run.ts",
+    "agent:release": "node --import tsx agents/release/run.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
