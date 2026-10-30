@@ -1,20 +1,22 @@
 /** Typed REST client for the control API (same origin in dev via Vite proxy). */
 const base = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(/\/$/, "");
+export const API_AUTH_REQUIRED_EVENT = "ads:api-auth-required";
 
 function apiKey(): string {
-  return (import.meta.env.VITE_API_KEY as string | undefined) ?? localStorage.getItem("ads_api_key") ?? "";
+  return localStorage.getItem("ads_api_key") || (import.meta.env.VITE_API_KEY as string | undefined) || "";
 }
 
 export function setApiKey(key: string): void {
   localStorage.setItem("ads_api_key", key);
 }
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+async function req<T>(path: string, init?: RequestInit, keyOverride?: string): Promise<T> {
+  const key = keyOverride ?? apiKey();
   const res = await fetch(`${base}/api/v1${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey()}`,
+      Authorization: `Bearer ${key}`,
       ...(init?.headers ?? {}),
     },
   });
@@ -27,19 +29,32 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`);
+    const body: unknown = await res.json().catch(() => ({}));
+    const error = body && typeof body === "object" && "error" in body ? body.error : undefined;
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    const message = error && typeof error === "object" && "message" in error ? error.message : undefined;
+    if (res.status === 401 && code === "unauthorized" && keyOverride === undefined && key === apiKey()) {
+      // An older in-flight request must not clear a newly saved key.
+      localStorage.removeItem("ads_api_key");
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(API_AUTH_REQUIRED_EVENT));
+    }
+    throw new Error(typeof message === "string" ? message : `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
 export const api = {
+  // Validate against an authenticated, read-only endpoint before saving a key.
+  validateApiKey: (key: string) => req<{ items: unknown[] }>("/projects", undefined, key),
   health: () => req<{ ok: boolean; store: string }>("/health"),
-  projects: () => req<{ items: unknown[] }>(`/projects`),
+  projects: () => req<{ items: ConnectedProject[] }>(`/projects`),
   connectProject: (body: Record<string, unknown>) =>
-    req("/projects/connect", { method: "POST", body: JSON.stringify(body) }),
+    req<{ project: ConnectedProject }>("/projects/connect", { method: "POST", body: JSON.stringify(body) }),
+  commits: (projectId: string, ref: string, page: number) =>
+    req<{ items: ProjectCommit[]; page: number; perPage: number; hasNext: boolean }>(
+      `/projects/${encodeURIComponent(projectId)}/commits?${new URLSearchParams({ ref, page: String(page), perPage: "20" })}`),
   runs: (params = "") => req<{ items: RunSummary[] }>(`/runs${params}`),
-  createRun: (body: Record<string, unknown>) => req("/runs", { method: "POST", body: JSON.stringify(body) }),
+  createRun: (body: Record<string, unknown>) => req<{ run: RunSummary }>("/runs", { method: "POST", body: JSON.stringify(body) }),
   runDetail: (id: string) => req<RunDetail>(`/runs/${id}`),
   runIssues: (id: string) => req<{ items: Issue[] }>(`/runs/${id}/issues`),
   runIterations: (id: string) => req<{ items: Iteration[] }>(`/runs/${id}/iterations`),
@@ -147,4 +162,19 @@ export function subscribeRunEvents(runId: string, onEvent: (e: { type: string; p
     }
   });
   return () => src.close();
+}
+
+export interface ConnectedProject {
+  id: string;
+  name: string;
+  pathWithNamespace: string;
+  defaultBranch: string;
+  webUrl: string;
+}
+export interface ProjectCommit {
+  id: string;
+  short_id: string;
+  title: string;
+  author_name: string;
+  created_at: string;
 }

@@ -1,9 +1,11 @@
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { Empty, ErrorBox, Loading } from "../components/Status";
 
 export function Projects() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["projects"], queryFn: () => api.projects() });
   const [form, setForm] = useState({ gitlabBaseUrl: "https://gitlab.com", gitlabProjectId: "", token: "" });
@@ -14,9 +16,10 @@ export function Projects() {
         gitlabProjectId: form.gitlabProjectId ? Number(form.gitlabProjectId) : undefined,
         token: form.token,
       }),
-    onSuccess: () => {
+    onSuccess: ({ project }) => {
       setForm((f) => ({ ...f, token: "" }));
       qc.invalidateQueries({ queryKey: ["projects"] });
+      navigate(`/runs?projectId=${encodeURIComponent(project.id)}`);
     },
   });
 
@@ -25,6 +28,7 @@ export function Projects() {
       <h2 style={{ margin: 0 }}>Projects</h2>
       <div className="card">
         <h3>Connect a GitLab project</h3>
+        <p className="muted">Enter your GitLab access token here. The dashboard API key is configured separately above.</p>
         <div className="row">
           <input aria-label="GitLab base URL" value={form.gitlabBaseUrl} onChange={(e) => setForm({ ...form, gitlabBaseUrl: e.target.value })} style={{ minWidth: 220 }} />
           <input aria-label="GitLab project ID" value={form.gitlabProjectId} onChange={(e) => setForm({ ...form, gitlabProjectId: e.target.value })} placeholder="Project ID (e.g. 123)" />
@@ -40,10 +44,10 @@ export function Projects() {
         <h3>Connected projects</h3>
         {list.isPending ? <Loading /> : list.isError ? <ErrorBox message={(list.error as Error).message} onRetry={() => list.refetch()} /> : (list.data.items as unknown[]).length === 0 ? <Empty message="No projects connected yet." /> : (
           <table>
-            <thead><tr><th>Name</th><th>Path</th><th>Default branch</th><th>URL</th></tr></thead>
+            <thead><tr><th>Name</th><th>Path</th><th>Default branch</th><th>URL</th><th>Review</th></tr></thead>
             <tbody>
               {(list.data.items as Array<{ id: string; name: string; pathWithNamespace: string; defaultBranch: string; webUrl: string }>).map((p) => (
-                <tr key={p.id}><td>{p.name}</td><td>{p.pathWithNamespace}</td><td>{p.defaultBranch}</td><td><a href={p.webUrl} target="_blank" rel="noreferrer">open</a></td></tr>
+                <tr key={p.id}><td>{p.name}</td><td>{p.pathWithNamespace}</td><td>{p.defaultBranch}</td><td><a href={p.webUrl} target="_blank" rel="noreferrer">open</a></td><td><Link to={`/runs?projectId=${encodeURIComponent(p.id)}`}>Review commits</Link></td></tr>
               ))}
             </tbody>
           </table>

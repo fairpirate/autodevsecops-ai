@@ -30,12 +30,12 @@ export function authMiddleware(config: Config) {
     const header = req.headers.authorization ?? "";
     const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
     if (!token) {
-      res.status(401).json({ error: { code: "unauthorized", message: "Missing Bearer token" } });
+      res.status(401).json({ error: { code: "unauthorized", message: "Missing control API key. Enter the dashboard key configured in the backend API_KEYS setting." } });
       return;
     }
     const match = config.apiKeys.find((k) => safeEqual(k.key, token));
     if (!match) {
-      res.status(401).json({ error: { code: "unauthorized", message: "Invalid API key" } });
+      res.status(401).json({ error: { code: "unauthorized", message: "Invalid control API key. Update the dashboard key to match API_KEYS on the backend; the GitLab access token belongs in the project connection form." } });
       return;
     }
     req.auth = { key: match.key, role: match.role };

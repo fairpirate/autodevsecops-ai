@@ -4,6 +4,7 @@ interface UiState {
   apiKeySet: boolean;
   refreshToken: number;
   markApiKeySet: () => void;
+  requireApiKey: () => void;
   bump: () => void;
 }
 
@@ -11,6 +12,7 @@ export const useUi = create<UiState>((set) => ({
   apiKeySet: Boolean(localStorage.getItem("ads_api_key") ?? (import.meta.env.VITE_API_KEY as string | undefined)),
   refreshToken: 0,
   markApiKeySet: () => set({ apiKeySet: true }),
+  requireApiKey: () => set({ apiKeySet: false }),
   bump: () => set((s) => ({ refreshToken: s.refreshToken + 1 })),
 }));
 
