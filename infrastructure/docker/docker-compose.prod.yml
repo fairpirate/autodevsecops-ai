@@ -5,7 +5,7 @@
 #   * Postgres and Redis use the Docker network only; no host ports.
 #   * Requires Docker Compose >=2.24.4 for !override port replacement.
 #   * API/dashboard host ports are configurable and bind to 127.0.0.1.
-#     Defaults: CONTROL_API_HOST_PORT=4000, DASHBOARD_HOST_PORT=8080.
+#     Defaults: CONTROL_API_HOST_PORT=14000, DASHBOARD_HOST_PORT=18080.
 #   * restart: unless-stopped on every service.
 #   * JSON log rotation + memory limits.
 #   * A health check on /api/v1/health.
@@ -68,9 +68,10 @@ services:
       file: docker-compose.yml
       service: control-api
     ports: !override
-      - "127.0.0.1:${CONTROL_API_HOST_PORT:-4000}:4000"
+      - "127.0.0.1:${CONTROL_API_HOST_PORT:-14000}:4000"
     restart: unless-stopped
     environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://autodevsecops.spiritedrobot.in}
       NODE_ENV: production
       STORE: prisma
       QUEUE_DRIVER: ${QUEUE_DRIVER:-memory}
@@ -93,11 +94,14 @@ services:
         max-file: "5"
 
   dashboard:
+    build:
+      args:
+        VITE_API_BASE_URL: ""
     extends:
       file: docker-compose.yml
       service: dashboard
     ports: !override
-      - "127.0.0.1:${DASHBOARD_HOST_PORT:-8080}:80"
+      - "127.0.0.1:${DASHBOARD_HOST_PORT:-18080}:80"
     restart: unless-stopped
     logging:
       driver: "json-file"

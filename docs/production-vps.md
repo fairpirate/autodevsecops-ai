@@ -119,69 +119,53 @@ generates Prisma Client for the container platform. Installing OpenSSL only
 on the VPS host does not install it inside the container. Keep any extra
 port override file in the Compose command when rebuilding on a shared VPS.
 
-## 6. Nginx + Certbot (TLS termination)
+## 6. Automatic Nginx + Certbot setup
 
-Host Nginx proxies `/api/` to the API container and everything else to the
-dashboard container. Adapt `infrastructure/nginx/autodevsecops.conf`:
+Run `./scripts/vps-deploy.sh` from your checkout. After verification and local
+health checks, it installs Nginx/Certbot if missing, enables a dedicated
+`autodevsecops` site, obtains the domain certificate using HTTP webroot
+validation, installs HTTPS proxies, enables the renewal timer and deploy hook,
+and checks `/login` and `/api/v1/health` over HTTPS. Re-running reuses a valid
+certificate. Failed configuration checks restore the previous site.
 
-On a shared VPS, set unused host ports in `.env`, for example
-`CONTROL_API_HOST_PORT=14000` and `DASHBOARD_HOST_PORT=18080`. Keep
-`CONTROL_API_PORT=4000` for the API inside Docker. In this project's Nginx
-site, use `proxy_pass http://127.0.0.1:14000;` for `/api/` and
-`proxy_pass http://127.0.0.1:18080;` for `/`. Adjust manual health checks to
-`http://127.0.0.1:14000/api/v1/health`. The deploy script discovers the
-published API port automatically. Existing projects can keep their ports.
+Set `PUBLIC_BASE_URL` in `.env` to your HTTPS domain (default:
+`https://autodevsecops.spiritedrobot.in`). DNS must point to this VPS and ports
+80/443 must be reachable. The script needs root or sudo for host configuration;
+other projects' Nginx sites are preserved. A duplicate exact domain in another
+site causes a diagnostic failure rather than silently enabling conflicting sites.
 
-1. Replace `server_name autodevsecops.spiritedrobot.in` with your domain.
-2. Replace cert paths `/etc/letsencrypt/live/<domain>/...` after Certbot runs.
-3. For Compose mode, change `root /var/www/...` in the `location /` block to
-   `proxy_pass http://127.0.0.1:8080;` (dashboard container), keeping the
-   `/api/` proxy to `http://127.0.0.1:4000` with the SSE settings
-   (`proxy_buffering off`, `proxy_read_timeout 3600s`).
-
-Bootstrap for the first certificate:
+The script uses dedicated loopback ports 14000 (API) and 18080 (dashboard),
+overriding old `.env` port values that may point at socialmedia services.
+For different ports, supply shell overrides on every deployment:
 
 ```bash
-sudo apt-get install -y nginx certbot
-sudo install -d -m 755 /var/www/letsencrypt
-sudo cp infrastructure/nginx/autodevsecops-bootstrap.conf /etc/nginx/sites-available/autodevsecops
-# edit server_name in that file to your domain
-sudo ln -sfn /etc/nginx/sites-available/autodevsecops /etc/nginx/sites-enabled/autodevsecops
-sudo nginx -t && sudo systemctl reload nginx
-
-sudo certbot certonly --webroot -w /var/www/letsencrypt \
-  --cert-name platform.example.com -d platform.example.com
+CONTROL_API_HOST_PORT=14001 DASHBOARD_HOST_PORT=18081 ./scripts/vps-deploy.sh
 ```
 
-Then install the real config:
+It renders proxy targets from the actual Docker bindings. Port conflicts stop
+deployment; the script does not stop unrelated containers. Before startup it
+checks the resolved Compose model against the selected ports and rejects extra
+bindings, public bindings and published database ports.
+
+If an older deployment still tries to bind port 4000, run:
 
 ```bash
-sudo cp infrastructure/nginx/autodevsecops.conf /etc/nginx/sites-available/autodevsecops
-# edit server_name + cert paths to your domain
-sudo ln -sfn /etc/nginx/sites-available/autodevsecops /etc/nginx/sites-enabled/autodevsecops
-sudo nginx -t && sudo systemctl reload nginx
+CONTROL_API_HOST_PORT=14000 DASHBOARD_HOST_PORT=18080 ./scripts/vps-deploy.sh
 ```
 
-Renewal hook (reload Nginx on renewed certs):
+Ensure the updated script, helper files and production overlay are present on
+the VPS. Changes made in another checkout are not automatically uploaded. The Compose overlay
+also defaults to 14000/18080 when used directly. The dashboard build uses the
+current browser origin, and its Nginx container handles React routes like `/login`.
 
-```bash
-sudo install -d /etc/letsencrypt/renewal-hooks/deploy
-sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null <<'HOOK'
-#!/bin/sh
-nginx -t && systemctl reload nginx
-HOOK
-sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-sudo systemctl enable --now certbot.timer
-sudo certbot renew --dry-run
-```
+Optionally provide `CERTBOT_EMAIL=you@example.com` when invoking the script.
+Without it, Certbot registers without an email. Existing certificates with over
+30 days remaining are reused. Certificate issuance requires working public DNS
+and HTTP validation; it cannot repair DNS or firewall configuration automatically.
+The installer targets Ubuntu/Debian with host Nginx and systemd.
 
-Verify:
-
-```bash
-curl -I https://platform.example.com/               # HTML, redirect from :80
-curl -i https://platform.example.com/api/v1/health  # HTTP 200 JSON
-curl -i https://platform.example.com/api/v1/projects # HTTP 401 JSON (no key yet)
-```
+For a non-Docker deployment with a static frontend, use
+[infrastructure/nginx/README.md](../infrastructure/nginx/README.md).
 
 ## 7. Firewall
 

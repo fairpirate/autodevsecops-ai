@@ -203,18 +203,13 @@ Run on the VPS:
 cp infrastructure/env/production.env.example .env
 # edit .env: secrets, PUBLIC_BASE_URL=https://your-domain, STORE=prisma
 chmod 600 .env
-npm ci --no-audit --no-fund
-npm run typecheck
-npm test
-npx tsx scripts/security-scan.ts
-VITE_API_BASE_URL= npm run build --workspace @ads/dashboard
-docker compose -f infrastructure/docker/docker-compose.yml \
-               -f infrastructure/docker/docker-compose.prod.yml \
-               --env-file .env up --build -d
-curl http://127.0.0.1:4000/api/v1/health   # expect {"status":"ok"}
+./scripts/vps-deploy.sh
 ```
 
-See `docs/production-vps.md` for the full procedure.
+The script configures Nginx, the domain certificate, automatic renewal and HTTPS
+routing. It uses dedicated loopback ports `14000`/`18080` to avoid the existing
+socialmedia services. DNS must already point to the VPS; root or sudo is required.
+See `docs/production-vps.md` for overrides and prerequisites.
 
 ## Metrics that mean something
 
@@ -231,6 +226,10 @@ callbacks deduped by `event_id`; audit log on every sensitive action; repo text
 never overrides policy (prompt-injection treated as untrusted input).
 
 ## Limitations (honest)
+
+- Automated VPS TLS setup requires Ubuntu/Debian, systemd, working public DNS
+  and reachable ports 80/443. Local checks do not prove certificate issuance or
+  routing on the deployed host; the script verifies those during deployment.
 
 - The dashboard Docker build requires the repository root as its build context
   (as configured in Compose), including `tsconfig.base.json` and

@@ -1,5 +1,10 @@
 # VPS Nginx setup
 
+For Docker Compose, run `./scripts/vps-deploy.sh`: it automatically installs
+the dedicated site, certificate and renewal hook using ports 14000/18080.
+See [the production guide](../../docs/production-vps.md#6-automatic-nginx--certbot-setup).
+The manual instructions below apply to a static frontend and host API.
+
 This configuration assumes Ubuntu/Debian, Nginx running directly on the VPS,
 and the control API listening on `127.0.0.1:4000` (or a local Docker port mapping).
 It serves a built frontend, so a Vite development server on port 5173 is not needed.

@@ -8,7 +8,8 @@
 #
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/opt/autodevsecops-ai}"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="${APP_DIR:-$SCRIPT_ROOT}"
 REPO="${REPO:-https://github.com/fairpirate/autodevsecops-ai.git}"
 BRANCH="${BRANCH:-main}"
 ENV_EXAMPLE="infrastructure/env/production.env.example"
@@ -47,6 +48,37 @@ if [[ ! -f .env ]]; then
 fi
 [[ -r .env ]] || die ".env is not readable"
 
+# Dedicated defaults override old .env ports that may belong to another project.
+# Explicit shell overrides remain available for hosts with different port usage.
+export CONTROL_API_HOST_PORT="${CONTROL_API_HOST_PORT:-14000}"
+export DASHBOARD_HOST_PORT="${DASHBOARD_HOST_PORT:-18080}"
+export VITE_API_BASE_URL=""
+PUBLIC_BASE_URL=$(node --env-file=.env -e '
+  const u = new URL(process.env.PUBLIC_BASE_URL || "https://autodevsecops.spiritedrobot.in");
+  if (u.protocol !== "https:" || u.port || u.username || u.password ||
+      u.pathname !== "/" || u.search || u.hash ||
+      !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(u.hostname)) {
+    console.error("PUBLIC_BASE_URL must be an HTTPS domain without a port or path"); process.exit(1);
+  }
+  console.log(u.origin);
+')
+export PUBLIC_BASE_URL
+DOMAIN="${PUBLIC_BASE_URL#https://}"
+for port in "$CONTROL_API_HOST_PORT" "$DASHBOARD_HOST_PORT"; do
+  [[ "$port" =~ ^[0-9]{1,5}$ ]] && (( 10#$port > 1024 && 10#$port < 65536 )) || die "Invalid host port: $port"
+done
+[[ "$CONTROL_API_HOST_PORT" != "$DASHBOARD_HOST_PORT" ]] || die "API and dashboard ports must differ"
+
+# Use the same resolved Compose inputs for validation, startup and inspection.
+compose() {
+  docker compose \
+    -f infrastructure/docker/docker-compose.yml \
+    -f infrastructure/docker/docker-compose.prod.yml \
+    --env-file .env "$@"
+}
+log "Checking production bindings: API 127.0.0.1:$CONTROL_API_HOST_PORT; dashboard 127.0.0.1:$DASHBOARD_HOST_PORT"
+compose config --format json | node scripts/vps-check-compose.mjs
+
 # ---------------------------------------------------------------------------
 # 3. Pre-flight verification (must stay green before anything ships)
 # ---------------------------------------------------------------------------
@@ -74,27 +106,16 @@ VITE_API_BASE_URL= npm run build --workspace @ads/dashboard
 # 5. Start stack (the control-api container runs Prisma migrate deploy on boot)
 # ---------------------------------------------------------------------------
 log "Starting production stack"
-docker compose \
-  -f infrastructure/docker/docker-compose.yml \
-  -f infrastructure/docker/docker-compose.prod.yml \
-  --env-file .env \
-  up --build -d
+compose up --build -d
 
 log "Applying Prisma migrations inside the API container"
-docker compose \
-  -f infrastructure/docker/docker-compose.yml \
-  -f infrastructure/docker/docker-compose.prod.yml \
-  exec -T control-api npx prisma migrate deploy --schema apps/control-api/prisma/schema.prisma
+compose exec -T control-api npx prisma migrate deploy --schema apps/control-api/prisma/schema.prisma
 
 # ---------------------------------------------------------------------------
 # 6. Health check
 # ---------------------------------------------------------------------------
 log "Waiting for control-api to become healthy"
-api_binding=$(docker compose \
-  -f infrastructure/docker/docker-compose.yml \
-  -f infrastructure/docker/docker-compose.prod.yml \
-  --env-file .env \
-  port control-api 4000)
+api_binding=$(compose port control-api 4000)
 [[ -n "$api_binding" ]] || die "control-api has no published port"
 health_url="http://${api_binding}/api/v1/health"
 for i in $(seq 1 30); do
@@ -110,9 +131,18 @@ else
   die "control-api health check failed — inspect: docker compose logs control-api"
 fi
 
-log "Deploy complete."
+dashboard_binding=$(compose port dashboard 80)
+[[ "$api_binding" =~ ^127\.0\.0\.1:[0-9]+$ && "$dashboard_binding" =~ ^127\.0\.0\.1:[0-9]+$ ]] || die "Expected loopback-only published ports"
+curl --connect-timeout 2 --max-time 10 -fsS "http://${dashboard_binding}/login" >/dev/null || die "Dashboard /login is not ready"
+
+log "Configuring Nginx and TLS for $DOMAIN"
+bash scripts/vps-configure-nginx.sh "$DOMAIN" "$api_binding" "$dashboard_binding"
+log "Verifying public HTTPS routing"
+curl --connect-timeout 10 --max-time 20 -fsS "$PUBLIC_BASE_URL/login" >/dev/null
+curl --connect-timeout 10 --max-time 20 -fsS "$PUBLIC_BASE_URL/api/v1/health" >/dev/null
+
+log "Deploy complete: $PUBLIC_BASE_URL/login"
 log "Next steps:"
-log "  1. Finish Nginx + Certbot TLS termination (docs/production-vps.md)."
-log "  2. Register the GitLab webhook: https://<domain>/api/v1/webhooks/gitlab"
+log "  1. Register the GitLab webhook: $PUBLIC_BASE_URL/api/v1/webhooks/gitlab"
 log "     (secret = GITLAB_WEBHOOK_SECRET, events: push, merge request, issue)."
-log "  3. In the dashboard, enter an API key from API_KEYS (part before :role)."
+log "  2. In the dashboard, enter an API key from API_KEYS (part before :role)."
