@@ -227,6 +227,12 @@ never overrides policy (prompt-injection treated as untrusted input).
 
 ## Limitations (honest)
 
+- Database health checks run `SELECT 1`; they do not prove the application schema
+  is migrated. Dashboard key validation also reads the projects table. Storage
+  failures on that route return HTTP 503. The deploy script also checks authenticated
+  project listing. Apply Prisma migrations and inspect
+  the API logs for database error codes (for example P2021 for a missing table).
+
 - Automated VPS TLS setup requires Ubuntu/Debian, systemd, working public DNS
   and reachable ports 80/443. Local checks do not prove certificate issuance or
   routing on the deployed host; the script verifies those during deployment.

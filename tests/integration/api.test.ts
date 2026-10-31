@@ -26,6 +26,35 @@ describe("control-api: auth, projects, runs, events", () => {
     expect(bad.body.error.code).toBe("unauthorized");
   });
 
+  it("handles project storage failure during key validation without crashing or leaking secrets", async () => {
+    const failure = Object.assign(new Error("postgresql://user:private-password@database/db"), { code: "P2021" });
+    const listing = vi.spyOn(h.store.projects, "list").mockRejectedValueOnce(failure);
+    const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await request(h.base).get("/api/v1/projects").set(h.auth());
+      expect(res.status).toBe(503);
+      expect(res.body.error.code).toBe("projects_unavailable");
+      expect(res.body.error.message).toContain("Prisma migrations");
+      expect(JSON.stringify(res.body)).not.toContain("private-password");
+      expect(logger).toHaveBeenCalledWith("[api] project listing failed (database code: P2021)");
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("private-password");
+      expect((await request(h.base).get("/api/v1/health")).status).toBe(200);
+      expect((await request(h.base).get("/api/v1/projects").set(h.auth())).status).toBe(200);
+    } finally {
+      listing.mockRestore();
+      logger.mockRestore();
+    }
+  });
+
+  it("rejects invalid keys without querying project storage", async () => {
+    const listing = vi.spyOn(h.store.projects, "list");
+    try {
+      const res = await request(h.base).get("/api/v1/projects").set("Authorization", "Bearer wrong-key");
+      expect(res.status).toBe(401);
+      expect(listing).not.toHaveBeenCalled();
+    } finally { listing.mockRestore(); }
+  });
+
   it("identifies invalid dashboard credentials before attempting GitLab access", async () => {
     const gitlabFetch = vi.spyOn(globalThis, "fetch");
     try {

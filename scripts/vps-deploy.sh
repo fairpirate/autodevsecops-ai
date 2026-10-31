@@ -131,6 +131,19 @@ else
   die "control-api health check failed — inspect: docker compose logs control-api"
 fi
 
+log "Verifying authenticated project storage"
+# Read the key inside the container; never put credentials in command arguments
+# or output. SELECT 1 alone cannot prove the application tables exist.
+compose exec -T control-api node -e '
+  const key = (process.env.API_KEYS || "").split(",")[0].split(":")[0];
+  if (!key) { console.error("Project storage check: API_KEYS is missing"); process.exit(1); }
+  fetch("http://127.0.0.1:4000/api/v1/projects", {
+    headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000),
+  }).then(async r => {
+    if (!r.ok || !Array.isArray((await r.json()).items)) throw new Error();
+  }).catch(() => { console.error("Project storage check failed; inspect API logs and Prisma migrations"); process.exit(1); });
+'
+
 dashboard_binding=$(compose port dashboard 80)
 [[ "$api_binding" =~ ^127\.0\.0\.1:[0-9]+$ && "$dashboard_binding" =~ ^127\.0\.0\.1:[0-9]+$ ]] || die "Expected loopback-only published ports"
 curl --connect-timeout 2 --max-time 10 -fsS "http://${dashboard_binding}/login" >/dev/null || die "Dashboard /login is not ready"

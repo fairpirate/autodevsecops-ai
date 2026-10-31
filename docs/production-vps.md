@@ -119,6 +119,20 @@ generates Prisma Client for the container platform. Installing OpenSSL only
 on the VPS host does not install it inside the container. Keep any extra
 port override file in the Compose command when rebuilding on a shared VPS.
 
+### Database schema on first deployment
+
+The repository now includes `20261031000000_initial`, which creates the
+application tables. Earlier versions had no migrations, so `migrate deploy`
+could finish without creating `Project` even though `/health` returned 200
+from `SELECT 1`. Rebuild the API image and rerun the deploy script to include
+and apply the migration. The script now checks authenticated project listing
+before continuing to configure HTTPS.
+
+If this database was already initialized through `prisma db push` or another
+migration history, compare its schema and baseline it with Prisma Migrate
+before applying the initial migration. Do not reset an existing database to
+resolve migration history conflicts.
+
 ## 6. Automatic Nginx + Certbot setup
 
 Run `./scripts/vps-deploy.sh` from your checkout. After verification and local

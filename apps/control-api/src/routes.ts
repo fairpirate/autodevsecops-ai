@@ -92,13 +92,26 @@ export function buildRouter(deps: AppDeps): Router {
   });
 
   router.get("/projects", async (_req, res) => {
-    const projects = await store.projects.list();
-    res.json({
-      items: projects.map(({ tokenEncrypted: _t, ...p }) => p),
-      page: 1,
-      perPage: projects.length,
-      total: projects.length,
-    });
+    try {
+      const projects = await store.projects.list();
+      res.json({
+        items: projects.map(({ tokenEncrypted: _t, ...p }) => p),
+        page: 1,
+        perPage: projects.length,
+        total: projects.length,
+      });
+    } catch (err: unknown) {
+      // Express 4 does not forward rejected async handlers. Keep storage errors
+      // from terminating the API during dashboard key validation. Log only a
+      // recognized Prisma code; database errors can contain connection secrets.
+      const code = typeof err === "object" && err !== null && "code" in err &&
+        typeof err.code === "string" && /^P[0-9]{4}$/.test(err.code) ? err.code : "unknown";
+      console.error(`[api] project listing failed (database code: ${code})`);
+      res.status(503).json({ error: {
+        code: "projects_unavailable",
+        message: "Could not load projects. Check database connectivity and apply pending Prisma migrations on the server.",
+      } });
+    }
   });
 
   router.get("/projects/:id", async (req, res) => {
